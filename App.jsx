@@ -24,8 +24,7 @@ const ROW_ID = "main";
    fog    #9AA39C  texte secondaire
 --------------------------------------------------------- */
 
-const HERO_PHOTO =
-  "https://images.unsplash.com/photo-1500534623283-312aade485b7?q=80&w=1600&auto=format&fit=crop";
+const HERO_PHOTO = "";
 
 const seedPhoto = (seed, w = 1200, h = 1500) =>
   `https://picsum.photos/seed/${seed}/${w}/${h}`;
@@ -622,6 +621,7 @@ function playIntroSting() {
 }
 
 function Hero({ profile, onStart }) {
+  const [photoReady, setPhotoReady] = useState(false);
   const handleStart = () => {
     playIntroSting();
     onStart();
@@ -629,7 +629,16 @@ function Hero({ profile, onStart }) {
   return (
     <header style={styles.hero}>
       <div style={styles.heroPhotoWrap}>
-        <img src={profile.photoUrl} alt="" style={styles.heroPhoto} className="hero-photo-in" draggable={false} />
+        {profile.photoUrl ? (
+          <img
+            src={profile.photoUrl}
+            alt=""
+            style={{ ...styles.heroPhoto, opacity: photoReady ? undefined : 0 }}
+            className={photoReady ? "hero-photo-in" : undefined}
+            onLoad={() => setPhotoReady(true)}
+            draggable={false}
+          />
+        ) : null}
         <div style={styles.heroOverlay} />
       </div>
 
