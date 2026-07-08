@@ -1844,14 +1844,16 @@ const styles = {
   heroOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, #0F1211aa 0%, transparent 30%, transparent 55%, #0F1211ee 100%)" },
 
   heroNameLayer: {
-    position: "absolute", top: "6%", left: 0, right: 0, zIndex: 2,
+    position: "absolute", top: "5%", left: 0, right: 0, zIndex: 2,
     display: "flex", flexDirection: "column", alignItems: "center", pointerEvents: "none",
+    width: "100%", overflow: "hidden",
   },
   heroGiantName: {
-    display: "block", width: "100%", textAlign: "center",
+    display: "block", width: "100%", textAlign: "center", whiteSpace: "nowrap",
     fontFamily: "'Anton', sans-serif", fontWeight: 400, textTransform: "uppercase",
-    fontSize: "clamp(46px, 16vw, 150px)", lineHeight: 0.92, letterSpacing: 0,
+    fontSize: "22vw", lineHeight: 0.9, letterSpacing: "-0.02em",
     color: "#D62828",
+    transform: "scaleY(1.15)", transformOrigin: "top",
     // Zone transparente plus large : VLAD reste plein, le reste devient translucide
     WebkitMaskImage: "radial-gradient(ellipse 58% 85% at 50% 52%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 45%, #000 82%)",
     maskImage: "radial-gradient(ellipse 58% 85% at 50% 52%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 45%, #000 82%)",
@@ -1859,9 +1861,9 @@ const styles = {
     textShadow: "0 2px 30px #00000040",
   },
   heroGiantNameLast: {
-    // Nagrant plus grand que Vladimir
-    fontSize: "clamp(62px, 22vw, 210px)",
-    marginTop: -8,
+    // Nagrant plus grand, remplit toute la largeur
+    fontSize: "27.5vw",
+    marginTop: "-2vw",
     WebkitMaskImage: "radial-gradient(ellipse 58% 85% at 50% 45%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 45%, #000 82%)",
     maskImage: "radial-gradient(ellipse 58% 85% at 50% 45%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 45%, #000 82%)",
   },
