@@ -1850,18 +1850,20 @@ const styles = {
   heroGiantName: {
     display: "block", width: "100%", textAlign: "center",
     fontFamily: "'Anton', sans-serif", fontWeight: 400, textTransform: "uppercase",
-    fontSize: "clamp(62px, 23vw, 220px)", lineHeight: 0.9, letterSpacing: 0,
+    fontSize: "clamp(46px, 16vw, 150px)", lineHeight: 0.92, letterSpacing: 0,
     color: "#D62828",
-    // Dégradé de transparence : plein sur les bords, translucide au centre (là où passe le visage)
-    WebkitMaskImage: "radial-gradient(ellipse 62% 90% at 50% 55%, rgba(0,0,0,0.14) 0%, rgba(0,0,0,0.4) 42%, #000 78%)",
-    maskImage: "radial-gradient(ellipse 62% 90% at 50% 55%, rgba(0,0,0,0.14) 0%, rgba(0,0,0,0.4) 42%, #000 78%)",
+    // Zone transparente plus large : VLAD reste plein, le reste devient translucide
+    WebkitMaskImage: "radial-gradient(ellipse 58% 85% at 50% 52%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 45%, #000 82%)",
+    maskImage: "radial-gradient(ellipse 58% 85% at 50% 52%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 45%, #000 82%)",
     WebkitTextStroke: "1px #D6282866",
     textShadow: "0 2px 30px #00000040",
   },
   heroGiantNameLast: {
-    // Deuxième ligne : centre encore un peu plus transparent
-    WebkitMaskImage: "radial-gradient(ellipse 60% 90% at 50% 45%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 42%, #000 78%)",
-    maskImage: "radial-gradient(ellipse 60% 90% at 50% 45%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 42%, #000 78%)",
+    // Nagrant plus grand que Vladimir
+    fontSize: "clamp(62px, 22vw, 210px)",
+    marginTop: -8,
+    WebkitMaskImage: "radial-gradient(ellipse 58% 85% at 50% 45%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 45%, #000 82%)",
+    maskImage: "radial-gradient(ellipse 58% 85% at 50% 45%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 45%, #000 82%)",
   },
 
   heroBottom: {
