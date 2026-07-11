@@ -330,6 +330,7 @@ export default function TravelJournal() {
   };
 
   const addPhotoToPage = (countryId, targetPageId, photo) => {
+    const MAX_PER_PAGE = 4;
     setData((d) => ({
       ...d,
       countries: d.countries.map((c) => {
@@ -337,12 +338,22 @@ export default function TravelJournal() {
         if (targetPageId === "__new__") {
           return { ...c, pages: [...c.pages, mkPage([{ ...photo, id: uid("ph") }])] };
         }
-        return {
-          ...c,
-          pages: c.pages.map((pg) =>
-            pg.id === targetPageId ? { ...pg, photos: [...pg.photos, { ...photo, id: uid("ph") }] } : pg
-          ),
-        };
+        const newPages = [];
+        for (const pg of c.pages) {
+          if (pg.id !== targetPageId) {
+            newPages.push(pg);
+            continue;
+          }
+          const combined = [...pg.photos, { ...photo, id: uid("ph") }];
+          if (combined.length <= MAX_PER_PAGE) {
+            newPages.push({ ...pg, photos: combined });
+          } else {
+            // Page pleine : le trop-plein bascule automatiquement sur une nouvelle page
+            newPages.push({ ...pg, photos: combined.slice(0, MAX_PER_PAGE) });
+            newPages.push(mkPage(combined.slice(MAX_PER_PAGE)));
+          }
+        }
+        return { ...c, pages: newPages };
       }),
     }));
   };
@@ -979,7 +990,7 @@ function Journal({
 
       {zoomedPhoto && (
         <div style={styles.zoomOverlay} onClick={() => setZoomedPhoto(null)}>
-          <img src={zoomedPhoto.src} alt={zoomedPhoto.caption || ""} style={styles.zoomImg} />
+          <Media item={zoomedPhoto} style={styles.zoomImg} />
           {zoomedPhoto.caption && <p style={styles.lightboxCaption}>{zoomedPhoto.caption}</p>}
         </div>
       )}
@@ -1118,10 +1129,32 @@ function CountryMap({ cities, border }) {
   );
 }
 
+function isVideo(item) {
+  return item?.type === "video" || /\.(mp4|webm|mov)$/i.test(item?.src || "");
+}
+
+function Media({ item, style, className }) {
+  if (isVideo(item)) {
+    return (
+      <video
+        src={item.src}
+        style={style}
+        className={className}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+  return <img src={item.src} alt={item.caption || ""} style={style} className={className} loading="lazy" />;
+}
+
 function SinglePhoto({ photo, isAdmin, onEdit, onDelete }) {
   return (
     <div style={styles.singleWrap}>
-      <img src={photo.src} alt={photo.caption || ""} style={styles.singleImg} />
+      <Media item={photo} style={styles.singleImg} />
       {photo.caption && <p style={styles.singleCaption}>{photo.caption}</p>}
       {isAdmin && (
         <div style={styles.thumbAdminBarStatic}>
@@ -1148,7 +1181,7 @@ function MosaicPage({ photos, isAdmin, onEdit, onDelete, onZoom }) {
       {photos.map((p) => (
         <div key={p.id} style={{ ...styles.mosaicItem, ...mosaicSpan(p.size) }}>
           <button className="thumb-btn" style={styles.mosaicBtn} onClick={() => onZoom(p)}>
-            <img src={p.src} alt={p.caption || ""} style={styles.mosaicImg} loading="lazy" />
+            <Media item={p} style={styles.mosaicImg} />
             {p.caption && <span style={styles.mosaicCaption}>{p.caption}</span>}
           </button>
           {isAdmin && (
@@ -1443,6 +1476,7 @@ function PhotoFormModal({ title, initial, pages, onClose, onSubmit }) {
   const [src, setSrc] = useState(initial?.src || "");
   const [caption, setCaption] = useState(initial?.caption || "");
   const [size, setSize] = useState(initial?.size || "normal");
+  const [mediaType, setMediaType] = useState(initial?.type || "photo");
   const [pageId, setPageId] = useState("__new__");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -1454,10 +1488,32 @@ function PhotoFormModal({ title, initial, pages, onClose, onSubmit }) {
     e.target.value = "";
     if (!file) return;
     setUploadError("");
+
+    // Vidéo : pas de recadrage, envoi direct
+    if (file.type?.startsWith("video/")) {
+      if (file.size > 50 * 1024 * 1024) {
+        setUploadError("Cette vidéo est trop lourde (plus de 50 Mo). Utilise une vidéo plus courte.");
+        return;
+      }
+      setUploading(true);
+      try {
+        const url = await uploadToStorage(file, file.name);
+        setSrc(url);
+        setMediaType("video");
+      } catch (err) {
+        console.error(err);
+        setUploadError("Échec de l'envoi de la vidéo. Réessaie.");
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     setPreparing(true);
     try {
       const prepared = await compressImage(file, 2000, 0.85);
       setPendingFile(prepared);
+      setMediaType("photo");
     } catch (err) {
       console.error(err);
       setUploadError("Impossible de préparer cette photo (format non supporté ?). Essaie une autre photo.");
@@ -1489,13 +1545,15 @@ function PhotoFormModal({ title, initial, pages, onClose, onSubmit }) {
     <Modal onClose={onClose}>
       <h3 style={styles.modalTitle}>{title}</h3>
 
-      <label style={styles.label}>Depuis ta galerie</label>
-      <input type="file" accept="image/*" style={styles.input} onChange={onPickFile} disabled={uploading || preparing} />
+      <label style={styles.label}>Depuis ta galerie (photo ou vidéo)</label>
+      <input type="file" accept="image/*,video/*" style={styles.input} onChange={onPickFile} disabled={uploading || preparing} />
       {preparing && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Préparation de la photo…</p>}
       {uploading && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Envoi en cours…</p>}
       {uploadError && <p style={{ fontSize: 12, color: "#E8785A", margin: "6px 0 0" }}>{uploadError}</p>}
       {src && !uploading && (
-        <img src={src} alt="Aperçu" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginTop: 10 }} />
+        mediaType === "video"
+          ? <video src={src} style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginTop: 10 }} autoPlay loop muted playsInline />
+          : <img src={src} alt="Aperçu" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginTop: 10 }} />
       )}
 
       <label style={styles.label}>...ou colle une URL d'image</label>
@@ -1521,7 +1579,7 @@ function PhotoFormModal({ title, initial, pages, onClose, onSubmit }) {
         <option value="big">Grande (2×2)</option>
       </select>
       <button style={styles.primaryBtn} disabled={!src || uploading}
-        onClick={() => onSubmit(pages ? { src, caption, size, pageId } : { src, caption, size })}>
+        onClick={() => onSubmit(pages ? { src, caption, size, type: mediaType, pageId } : { src, caption, size, type: mediaType })}>
         Enregistrer
       </button>
     </Modal>
