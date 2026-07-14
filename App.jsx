@@ -1,2047 +1,3356 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
-import heic2any from "heic2any";
-import Globe3D from "globe.gl";
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Check,
+  Clock,
+  Package,
+  User,
+  ClipboardList,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
+  AlertTriangle,
+  Settings,
+  ArrowLeft,
+} from "lucide-react";
 
-/* ---------------------------------------------------------
-   SUPABASE
-   Remplace ces deux valeurs par celles de TON projet Supabase
-   (Project Settings > API > Project URL / anon public key)
---------------------------------------------------------- */
-const supabase = createClient(
-  "https://mkrlqosqccxylgubegmh.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcmxxb3NxY2N4eWxndWJlZ21oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxMDQ4NjYsImV4cCI6MjA5ODY4MDg2Nn0._rdp2MBa88usfDNnwJjnew0hGn58WB-CSMy0snPu-OA"
-);
-const ROW_ID = "main";
+const EMPLOYEES_KEY = "stock:employees";
+const CATALOGUE_KEY = "stock:catalogue:v2";
+const REQUESTS_KEY = "stock:demandes";
+const HISTORY_KEY = "stock:historique";
+const CASH_KEY = "stock:monnaie";
+const PINS_KEY = "stock:pins";
 
-/* ---------------------------------------------------------
-   TOKENS
-   ink    #0F1211  fond général (presque noir, chaud)
-   panel  #1B1E1C  panneaux / modales
-   brown  #8B5E34  accent nom / titres (sur photo N&B)
-   sand   #C9A876  accent secondaire (globe, liens)
-   cream  #F4EFE7  texte principal
-   fog    #9AA39C  texte secondaire
---------------------------------------------------------- */
+const DENOMINATIONS = [
+  { id: "r005", type: "rouleau", value: 2.50, label: "Rouleau 5 cts (2.50)" },
+  { id: "r010", type: "rouleau", value: 5, label: "Rouleau 10 cts (5.-)" },
+  { id: "r020", type: "rouleau", value: 10, label: "Rouleau 20 cts (10.-)" },
+  { id: "r050", type: "rouleau", value: 25, label: "Rouleau 50 cts (25.-)" },
+  { id: "r1", type: "rouleau", value: 50, label: "Rouleau 1.- (50.-)" },
+  { id: "r2", type: "rouleau", value: 100, label: "Rouleau 2.- (100.-)" },
+  { id: "r5", type: "rouleau", value: 125, label: "Rouleau 5.- (125.-)" },
+  { id: "b10", type: "billet", value: 10, label: "Billet 10.-" },
+  { id: "b20", type: "billet", value: 20, label: "Billet 20.-" },
+  { id: "b50", type: "billet", value: 50, label: "Billet 50.-" },
+  { id: "b100", type: "billet", value: 100, label: "Billet 100.-" },
+];
 
-const HERO_PHOTO = "";
+// Users: { id, name, role }  role: "employe" | "chef" | "manager"
+const DEFAULT_USERS = [
+  { id: "u1", name: "Vladimir",        role: "manager" },
+  { id: "u2", name: "Antonio",         role: "employe" },
+  { id: "u3", name: "Patricia",        role: "employe" },
+  { id: "u4", name: "Lara",            role: "employe" },
+  { id: "u5", name: "Silvestro",       role: "employe" },
+  { id: "u6", name: "Ilaria",          role: "employe" },
+  { id: "u7", name: "Tristan",         role: "employe" },
+  { id: "u8", name: "Ahmed",           role: "employe" },
+  { id: "u9", name: "Chef d'équipe",   role: "chef" },
+  { id: "u10", name: "Manager",        role: "manager" },
+];
+const DEFAULT_PINS = Object.fromEntries(DEFAULT_USERS.map((u) => [u.id, "1234"]));
+// Legacy: keep a flat name list for backward-compat where employees[] is still used
+const DEFAULT_EMPLOYEES = DEFAULT_USERS.filter((u) => u.role === "employe").map((u) => u.name);
 
-const seedPhoto = (seed, w = 1200, h = 1500) =>
-  `https://picsum.photos/seed/${seed}/${w}/${h}`;
+// Article: { id, code, name, category, subcategory, minStock }
+const DEFAULT_CATALOGUE = [
+  { id: "a1", code: "516897", name: "Coca-Cola Pet (50cl)", category: "Boissons", subcategory: "Sodas", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a2", code: "516894", name: "Coca-Cola Zéro Pet (50cl)", category: "Boissons", subcategory: "Sodas", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a3", code: "439885", name: "Coca-Cola Alu (33cl)", category: "Boissons", subcategory: "Sodas", groupe: "Alimentaire", minStock: 24, minUnit: "ct" },
+  { id: "a4", code: "409166", name: "Coca-Cola Zéro Alu (33cl)", category: "Boissons", subcategory: "Sodas", groupe: "Alimentaire", minStock: 24, minUnit: "ct" },
+  { id: "a5", code: "142857", name: "Eau Minérale Henniez Bleue Pet (50cl)", category: "Boissons", subcategory: "Eau", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a6", code: "105829", name: "Eau Minérale Henniez Verte Pet (50cl)", category: "Boissons", subcategory: "Eau", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a7", code: "490892", name: "Jus d'abricot (33cl)", category: "Boissons", subcategory: "Jus", groupe: "Alimentaire", minStock: 12, minUnit: "btl" },
+  { id: "a8", code: "490890", name: "Jus de pomme (33cl)", category: "Boissons", subcategory: "Jus", groupe: "Alimentaire", minStock: 12, minUnit: "btl" },
+  { id: "a9", code: "490894", name: "Jus de poire (33cl)", category: "Boissons", subcategory: "Jus", groupe: "Alimentaire", minStock: 12, minUnit: "btl" },
+  { id: "a10", code: "409155", name: "Sinalco Pet (50cl)", category: "Boissons", subcategory: "Sodas", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a11", code: "477881", name: "Schweppes Pet (50cl)", category: "Boissons", subcategory: "Sodas", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a12", code: "511255", name: "Thé bio pêche Pet (50cl)", category: "Boissons", subcategory: "Thé froid", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a13", code: "472235", name: "Thé bio citron Pet (50cl)", category: "Boissons", subcategory: "Thé froid", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a14", code: "489922", name: "Thé bio vert Pet (50cl)", category: "Boissons", subcategory: "Thé froid", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a15", code: "499407", name: "Citronnade aux 2 Citrons M&A (33cl)", category: "Boissons", subcategory: "Jus", groupe: "Alimentaire", minStock: 12, minUnit: "btl" },
+  { id: "a16", code: "490325", name: "Bière Panaché S/Alcool Canette Bilz (33cl)", category: "Boissons", subcategory: "Bières", groupe: "Alimentaire", minStock: 24, minUnit: "ct" },
+  { id: "a17", code: "493166", name: "Eau Minérale Henniez Bleue Verre (50cl)", category: "Boissons", subcategory: "Eau", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a18", code: "493153", name: "Eau Minérale Henniez Bleue Verre (75cl)", category: "Boissons", subcategory: "Eau", groupe: "Alimentaire", minStock: 12, minUnit: "btl" },
+  { id: "a19", code: "459784", name: "Eau Minérale Henniez Verte Verre (50cl)", category: "Boissons", subcategory: "Eau", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a20", code: "459752", name: "Eau Minérale Henniez Verte Verre (75cl)", category: "Boissons", subcategory: "Eau", groupe: "Alimentaire", minStock: 12, minUnit: "btl" },
+  { id: "a21", code: "482082", name: "Assem. Riesling/Sylvaner/Pinot Cuvée Gustave (75cl)", category: "Vins / Alcool Brasserie", subcategory: "Vins", groupe: "Alimentaire", minStock: 6, minUnit: "btl" },
+  { id: "a22", code: "482081", name: "Assem. Gamaret/Garanoir Cuvée Gustave (75cl)", category: "Vins / Alcool Brasserie", subcategory: "Vins", groupe: "Alimentaire", minStock: 6, minUnit: "btl" },
+  { id: "a23", code: "VIN-BLANC", name: "Vin du mois au choix blanc", category: "Vins / Alcool Brasserie", subcategory: "Vins", groupe: "Alimentaire", minStock: 6, minUnit: "btl" },
+  { id: "a24", code: "VIN-ROUGE", name: "Vin du mois au choix rouge", category: "Vins / Alcool Brasserie", subcategory: "Vins", groupe: "Alimentaire", minStock: 6, minUnit: "btl" },
+  { id: "a25", code: "492952", name: "Proseco", category: "Vins / Alcool Brasserie", subcategory: "Vins", groupe: "Alimentaire", minStock: 6, minUnit: "btl" },
+  { id: "a26", code: "492400", name: "Rosé l'instant cave de Genève", category: "Vins / Alcool Brasserie", subcategory: "Vins", groupe: "Alimentaire", minStock: 6, minUnit: "btl" },
+  { id: "a27", code: "460745", name: "Apérol", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a28", code: "46054", name: "Crème de cassis", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a29", code: "471282", name: "Limonello Original Denis (1x70cl)", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a30", code: "491062", name: "Picon Bière 18° (100cl)", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a31", code: "460803", name: "Rhum", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a32", code: "468243", name: "Sirop de sureau", category: "Vins / Alcool Brasserie", subcategory: "Sirops", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a33", code: "460800", name: "Cognac", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a34", code: "487268", name: "Whisky", category: "Vins / Alcool Brasserie", subcategory: "Spiritueux", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a35", code: "474249", name: "Sirop Fraise (100cl)", category: "Vins / Alcool Brasserie", subcategory: "Sirops", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a36", code: "103286", name: "Sirop Framboise Pet Quality (100cl)", category: "Vins / Alcool Brasserie", subcategory: "Sirops", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a37", code: "92974", name: "Sirop de menthe (1lt)", category: "Vins / Alcool Brasserie", subcategory: "Sirops", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a38", code: "460545", name: "Sirop de Grenadine Monin (70cl) Brasserie", category: "Vins / Alcool Brasserie", subcategory: "Sirops", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a39", code: "460271", name: "Sirop de sucre de canne (1lt)", category: "Vins / Alcool Brasserie", subcategory: "Sirops", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a40", code: "130610", name: "Lait délactosé", category: "Produits laitiers", subcategory: "Lait", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a41", code: "494220", name: "Lait d'avoine", category: "Produits laitiers", subcategory: "Lait", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a42", code: "115779", name: "Lait entier 3.5", category: "Produits laitiers", subcategory: "Lait", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a43", code: "462165", name: "Ovomaltine Drink (33cl)", category: "Produits laitiers", subcategory: "Lait", groupe: "Alimentaire", minStock: 24, minUnit: "btl" },
+  { id: "a44", code: "481323", name: "Yaourt vanille", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a45", code: "481322", name: "Yaourt nature", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a46", code: "481320", name: "Yaourt café", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a47", code: "481318", name: "Yaourt fraise", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a48", code: "481319", name: "Yaourt framboise", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a49", code: "481321", name: "Yaourt myrtilles", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a50", code: "481317", name: "Yaourt abricots", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a51", code: "481324", name: "Yaourt ananas", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 15, minUnit: "ct" },
+  { id: "a52", code: "453169", name: "Yaourt délactosés vanille", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a53", code: "453166", name: "Yaourt délactosés framboise", category: "Produits laitiers", subcategory: "Yaourts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a54", code: "453939", name: "Riz au lait bonne maman", category: "Desserts", subcategory: "Desserts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a55", code: "461595", name: "Mousse au chocolat bonne maman", category: "Desserts", subcategory: "Desserts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a56", code: "102620", name: "Tiramisu", category: "Desserts", subcategory: "Desserts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a57", code: "409471", name: "Dessert bi couche myrtille", category: "Desserts", subcategory: "Desserts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a58", code: "463450", name: "Panna cotta", category: "Desserts", subcategory: "Desserts", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a59", code: "466831", name: "Glace pot artisan glacier vanille", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a60", code: "466832", name: "Glace pot artisan glacier abricot", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a61", code: "466833", name: "Glace pot artisan glacier citron", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a62", code: "466826", name: "Glace pot artisan glacier caramel", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a63", code: "466827", name: "Glace pot artisan glacier chocolat", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a64", code: "502843", name: "Glace pot artisan glacier exotique", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a65", code: "466834", name: "Glace pot artisan glacier fraise", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a66", code: "466835", name: "Glace pot artisan glacier framboise", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a67", code: "466825", name: "Glace pot artisan glacier café", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a68", code: "487902", name: "Glace pot artisan glacier straciatella", category: "Glace", subcategory: "Pots artisan", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a69", code: "14495", name: "Cornetto vanille", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a70", code: "14496", name: "Cornetto fraise", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a71", code: "14498", name: "Cornetto chocolat", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a72", code: "125770", name: "Glace magnum vanille amandes", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a73", code: "409383", name: "Glace magnum classique", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a74", code: "89004", name: "Glace magnum chocolat blanc", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a75", code: "409369", name: "Glace solero", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a76", code: "409371", name: "Glace à l'eau lippo", category: "Glace", subcategory: "Individuel", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a77", code: "459700", name: "Confiture orange", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a78", code: "459697", name: "Confiture figue", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a79", code: "448626", name: "Confiture fraise", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a80", code: "459699", name: "Confiture myrtille", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a81", code: "459695", name: "Confiture fruits rouges", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a82", code: "453051", name: "Miel", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a83", code: "448623", name: "Confiture abricot", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a84", code: "448625", name: "Confiture cerise", category: "Kiosque", subcategory: "Confitures & Miel", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a85", code: "487904", name: "Chocolat Tablette Suisse Extra Noir (36x40g)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a86", code: "487905", name: "Chocolat Tablette Suisse Lait/Noisettes (36x40g)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a87", code: "410048", name: "Chocolats Branches Cailler Lait (44x46g)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a88", code: "483003", name: "Chocolats Branches Cailler Noir (44x46g)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a89", code: "470318", name: "Chocolat Vermicelles Au Lait Natura Bio (600)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a90", code: "410047", name: "Chocolats Ragusa (32x50g)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a91", code: "418522", name: "Chocolats Toblerone Lait (20x100g)", category: "Kiosque", subcategory: "Chocolats", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a92", code: "465601", name: "Cookies sans gluten bio vegan framboise", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a93", code: "465599", name: "Cookies sans gluten bio vegan chocolat", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a94", code: "465600", name: "Cookies sans gluten bio vegan noix au lait", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a95", code: "479121", name: "Cookies sans gluten bio vegan caramel", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a96", code: "507264", name: "Barre Céréales Cranberries Framboise Vegan (20x45gr)", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 20, minUnit: "btl" },
+  { id: "a97", code: "507266", name: "Barre Céréales Chocolat (20x45gr)", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 20, minUnit: "btl" },
+  { id: "a98", code: "BAR-NOIS", name: "Barre Céréales noisette (20x45gr)", category: "Kiosque", subcategory: "Cookies & Barres", groupe: "Alimentaire", minStock: 20, minUnit: "btl" },
+  { id: "a99", code: "410062", name: "Chewing-Gum Stimorol Spearmint (50x14g)", category: "Kiosque", subcategory: "Chewing-Gum & Snacks", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a100", code: "465507", name: "Chewing-Gum Stimorol Strawberry (50x14g)", category: "Kiosque", subcategory: "Chewing-Gum & Snacks", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a101", code: "470128", name: "Chips", category: "Kiosque", subcategory: "Chewing-Gum & Snacks", groupe: "Alimentaire", minStock: 12, minUnit: "ct" },
+  { id: "a102", code: "58679", name: "Crème à café", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a103", code: "123411", name: "Sucre en stick brasserie", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a104", code: "12224", name: "Assugrine", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a105", code: "468056", name: "Sucre de canne en sachet brasserie", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a106", code: "92995", name: "Sucre 5 gr sachet", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a107", code: "409026", name: "Panettone", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 5, minUnit: "btl" },
+  { id: "a108", code: "462305", name: "Chocolat 58% (5kg)", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 2, minUnit: "btl" },
+  { id: "a109", code: "491866", name: "Biscuit café brasserie", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a110", code: "132069", name: "Café", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 5, minUnit: "kg" },
+  { id: "a111", code: "476995", name: "Sauce blanche salade", category: "Economat", subcategory: "Sauces", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a112", code: "424580", name: "Sauce italienne salade", category: "Economat", subcategory: "Sauces", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a113", code: "442530", name: "Sauce balsamic salade", category: "Economat", subcategory: "Sauces", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a114", code: "462269", name: "Café moulu déca", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 5, minUnit: "ct" },
+  { id: "a115", code: "453061", name: "Assortiment de tisanes et thé", category: "Economat", subcategory: "Economat", groupe: "Alimentaire", minStock: 6, minUnit: "ct" },
+  { id: "a116", code: "MAT-001", name: "Gants jetables", category: "Matériel", subcategory: "Hygiène", groupe: "Non Alimentaire", minStock: 10, minUnit: "ct" },
+  { id: "a117", code: "MAT-002", name: "Sacs poubelle", category: "Matériel", subcategory: "Nettoyage", groupe: "Non Alimentaire", minStock: 5, minUnit: "ct" },
+  { id: "a118", code: "MAT-003", name: "Gobelet Renversé - Thé", category: "Matériel", subcategory: "Gobelets", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a119", code: "MAT-004", name: "Gobelet Café", category: "Matériel", subcategory: "Gobelets", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a120", code: "MAT-005", name: "Gobelet Espresso", category: "Matériel", subcategory: "Gobelets", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a121", code: "MAT-006", name: "Boîte à pâtes", category: "Matériel", subcategory: "Boîte à pâtes", groupe: "Non Alimentaire", minStock: 20, minUnit: "ct" },
+  { id: "a122", code: "MAT-007", name: "Couverts BIO", category: "Matériel", subcategory: "Couverts BIO", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a123", code: "MAT-008", name: "Serviettes Gustave", category: "Matériel", subcategory: "Serviettes Gustave", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a124", code: "MAT-009", name: "Pailles", category: "Matériel", subcategory: "Brasserie", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a125", code: "MAT-010", name: "Sous-verres", category: "Matériel", subcategory: "Brasserie", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+  { id: "a126", code: "MAT-011", name: "Serviette Brasserie", category: "Matériel", subcategory: "Brasserie", groupe: "Non Alimentaire", minStock: 50, minUnit: "ct" },
+];
 
-const mkPage = (photos) => ({ id: uid("pg"), photos });
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
 
-const INITIAL_DATA = {
-  profile: {
-    prenom: "Vladimir",
-    nom: "Nagrant",
-    phrase: "Une valise, un billet, et le voyage qui recommence.",
-    photoUrl: HERO_PHOTO,
-  },
-  countries: [
-    {
-      id: "argentine",
-      name: "Argentine",
-      lat: -34,
-      lon: -64,
-      story: "Dix villes, du Nord aride à la Patagonie glacée. Un pays qui se traverse plus qu'il ne se visite.",
-      border: [],
-      cities: [
-        { id: uid("vi"), name: "Buenos Aires", lat: -34.61, lon: -58.38 },
-        { id: uid("vi"), name: "Tigre", lat: -34.42, lon: -58.58 },
-        { id: uid("vi"), name: "Mar del Plata", lat: -38.0, lon: -57.56 },
-        { id: uid("vi"), name: "Salta", lat: -24.78, lon: -65.41 },
-        { id: uid("vi"), name: "Cafayate", lat: -26.07, lon: -65.97 },
-        { id: uid("vi"), name: "Purmamarca", lat: -23.75, lon: -65.5 },
-        { id: uid("vi"), name: "Puerto Madryn", lat: -42.77, lon: -65.04 },
-        { id: uid("vi"), name: "Puerto Pirámides", lat: -42.58, lon: -64.28 },
-        { id: uid("vi"), name: "El Calafate", lat: -50.34, lon: -72.28 },
-        { id: uid("vi"), name: "Perito Moreno", lat: -50.49, lon: -73.05 },
-      ],
-      pages: [
-        mkPage([{ id: "ar1", src: seedPhoto("arg1"), caption: "Buenos Aires, quartier de la Boca", size: "normal" }]),
-        mkPage([
-          { id: "ar2", src: seedPhoto("arg2"), caption: "", size: "normal" },
-          { id: "ar3", src: seedPhoto("arg3"), caption: "Glacier Perito Moreno", size: "tall" },
-          { id: "ar4", src: seedPhoto("arg4"), caption: "", size: "normal" },
-        ]),
-        mkPage([{ id: "ar5", src: seedPhoto("arg5"), caption: "Asado du dimanche", size: "normal" }]),
-      ],
-    },
-    {
-      id: "japon",
-      name: "Japon",
-      lat: 36,
-      lon: 138,
-      story: "",
-      cities: [],
-      border: [],
-      pages: [
-        mkPage([{ id: "jp1", src: seedPhoto("jap1"), caption: "Kyoto, forêt de bambous", size: "normal" }]),
-        mkPage([
-          { id: "jp2", src: seedPhoto("jap2"), caption: "", size: "normal" },
-          { id: "jp3", src: seedPhoto("jap3"), caption: "Shibuya de nuit", size: "wide" },
-          { id: "jp4", src: seedPhoto("jap4"), caption: "", size: "normal" },
-        ]),
-      ],
-    },
-    {
-      id: "italie",
-      name: "Italie",
-      lat: 42,
-      lon: 12,
-      story: "",
-      cities: [],
-      border: [],
-      pages: [
-        mkPage([
-          { id: "it1", src: seedPhoto("ita1"), caption: "Cinque Terre", size: "normal" },
-          { id: "it2", src: seedPhoto("ita2"), caption: "", size: "tall" },
-        ]),
-        mkPage([{ id: "it3", src: seedPhoto("ita3"), caption: "Rome, golden hour", size: "normal" }]),
-      ],
-    },
-    {
-      id: "perou",
-      name: "Pérou",
-      lat: -9,
-      lon: -75,
-      story: "",
-      cities: [],
-      border: [],
-      pages: [
-        mkPage([{ id: "pe1", src: seedPhoto("per1"), caption: "Machu Picchu au lever du jour", size: "normal" }]),
-        mkPage([{ id: "pe2", src: seedPhoto("per2"), caption: "", size: "normal" }]),
-      ],
-    },
-    {
-      id: "thailande",
-      name: "Thaïlande",
-      lat: 15,
-      lon: 101,
-      story: "",
-      cities: [],
-      border: [],
-      pages: [
-        mkPage([
-          { id: "th1", src: seedPhoto("tha1"), caption: "", size: "normal" },
-          { id: "th2", src: seedPhoto("tha2"), caption: "Krabi", size: "wide" },
-        ]),
-      ],
-    },
-    {
-      id: "portugal",
-      name: "Portugal",
-      lat: 39,
-      lon: -8,
-      story: "",
-      cities: [],
-      border: [],
-      pages: [
-        mkPage([{ id: "pt1", src: seedPhoto("por1"), caption: "Porto, quartier de Ribeira", size: "normal" }]),
-        mkPage([{ id: "pt2", src: seedPhoto("por2"), caption: "", size: "normal" }]),
-      ],
-    },
-  ],
+const SUPABASE_URL = "https://rmfraspxdwmgqkxbmobg.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtZnJhc3B4ZHdtZ3FreGJtb2JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MDM2NjYsImV4cCI6MjA5ODQ3OTY2Nn0.HZAp3ki90kkyEp5zmHE0vd7p3kHN5N59gqZ-jUWMpEY";
+const SB_HEADERS = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
 };
 
-const ADMIN_PIN = "3802";
-
-function uid(prefix = "p") {
-  return `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`;
-}
-
-function shuffleArray(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function randomMosaicSizes(n) {
-  const sizes = new Array(n).fill("normal");
-  if (n >= 3 && Math.random() < 0.7) {
-    sizes[Math.floor(Math.random() * n)] = Math.random() < 0.5 ? "wide" : "tall";
-  }
-  return shuffleArray(sizes);
-}
-
-// Répartit une liste de photos sur plusieurs pages : certaines en photo seule
-// (plus impactant visuellement), d'autres en mosaïque de 3-4, dans un ordre aléatoire.
-function autoLayoutPhotos(photos) {
-  const pool = shuffleArray(photos);
-  const pages = [];
-  let i = 0;
-  while (i < pool.length) {
-    const remaining = pool.length - i;
-    let groupSize;
-    if (remaining <= 2) {
-      groupSize = remaining;
-    } else {
-      const r = Math.random();
-      groupSize = r < 0.3 ? 1 : r < 0.65 ? 3 : 4;
-      groupSize = Math.min(groupSize, remaining);
-    }
-    const group = pool.slice(i, i + groupSize);
-    const sizes = groupSize === 1 ? ["normal"] : randomMosaicSizes(groupSize);
-    pages.push(mkPage(group.map((p, idx) => ({ ...p, id: uid("ph"), size: sizes[idx] }))));
-    i += groupSize;
-  }
-  return pages;
-}
-
-/* Orthographic-ish projection for the abstract globe */
-function globeProject(lat, lon, lat0 = 12, lon0 = -20) {
-  const toRad = (d) => (d * Math.PI) / 180;
-  const φ0 = toRad(lat0), λ0 = toRad(lon0);
-  const φ = toRad(lat), λ = toRad(lon);
-  const cosc = Math.sin(φ0) * Math.sin(φ) + Math.cos(φ0) * Math.cos(φ) * Math.cos(λ - λ0);
-  const x = Math.cos(φ) * Math.sin(λ - λ0);
-  const y = Math.cos(φ0) * Math.sin(φ) - Math.sin(φ0) * Math.cos(φ) * Math.cos(λ - λ0);
-  return { x, y, front: cosc > 0 };
-}
-
-export default function TravelJournal() {
-  const [data, setData] = useState(INITIAL_DATA);
-  const [loaded, setLoaded] = useState(false);
-  const [view, setView] = useState("home"); // home | journal
-  const [activeCountryId, setActiveCountryId] = useState(null);
-  const [pageIndex, setPageIndex] = useState(0);
-  const [zoomedPhoto, setZoomedPhoto] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState(false);
-  const [showAddPhoto, setShowAddPhoto] = useState(false);
-  const [showBulkUpload, setShowBulkUpload] = useState(false);
-  const [editingPhoto, setEditingPhoto] = useState(null);
-  const [showAddCountry, setShowAddCountry] = useState(false);
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [showEditCover, setShowEditCover] = useState(false);
-  const [editingTileCountryId, setEditingTileCountryId] = useState(null);
-
-  const touchStartX = useRef(null);
-  const saveTimer = useRef(null);
-  const indexRef = useRef(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: row, error } = await supabase
-          .from("travel_data")
-          .select("data")
-          .eq("id", ROW_ID)
-          .maybeSingle();
-        if (error) throw error;
-        if (row && row.data) {
-          setData(row.data);
-        } else {
-          // Rien en base : on initialise avec les données de démarrage
-          await supabase.from("travel_data").insert({ id: ROW_ID, data: INITIAL_DATA });
-        }
-      } catch (e) {
-        console.error("Erreur de chargement Supabase", e);
-      } finally {
-        setLoaded(true);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!loaded) return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        const { error } = await supabase
-          .from("travel_data")
-          .upsert({ id: ROW_ID, data, updated_at: new Date().toISOString() });
-        if (error) throw error;
-      } catch (e) {
-        console.error("Erreur de sauvegarde Supabase", e);
-      }
-    }, 500);
-    return () => clearTimeout(saveTimer.current);
-  }, [data, loaded]);
-
-  const activeCountry = data.countries.find((c) => c.id === activeCountryId) || null;
-  const pages = activeCountry?.pages || [];
-  const currentPage = pages[pageIndex];
-
-  const scrollToIndex = () => {
-    indexRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const savedScrollY = useRef(0);
-
-  const openCountry = (id) => {
-    savedScrollY.current = window.scrollY;
-    setActiveCountryId(id);
-    setPageIndex(-1);
-    setView("journal");
-  };
-
-  const returnToHome = () => {
-    setView("home");
-    setActiveCountryId(null);
-    setZoomedPhoto(null);
-    // Restaure la position exacte de la page d'accueil (globe, tuiles)
-    requestAnimationFrame(() => window.scrollTo(0, savedScrollY.current));
-  };
-
-  const closeJournal = () => {
-    returnToHome();
-  };
-
-  const nextPage = useCallback(() => {
-    setPageIndex((i) => Math.min(i + 1, Math.max(pages.length - 1, 0)));
-  }, [pages.length]);
-
-  const prevPage = useCallback(() => {
-    setPageIndex((i) => Math.max(i - 1, -1));
-  }, []);
-
-  useEffect(() => {
-    if (view !== "journal") return;
-    const onKey = (e) => {
-      if (e.key === "ArrowRight") nextPage();
-      if (e.key === "ArrowLeft") prevPage();
-      if (e.key === "Escape") (zoomedPhoto ? setZoomedPhoto(null) : closeJournal());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [view, nextPage, prevPage, zoomedPhoto]);
-
-  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
-  const onTouchEnd = (e) => {
-    if (touchStartX.current === null || zoomedPhoto) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    if (delta > 55) prevPage();
-    else if (delta < -55) nextPage();
-    touchStartX.current = null;
-  };
-
-  const checkPin = () => {
-    if (pinInput === ADMIN_PIN) {
-      setIsAdmin(true);
-      setShowPinModal(false); setPinInput(""); setPinError(false);
-    } else setPinError(true);
-  };
-
-  const addPhotoToPage = (countryId, targetPageId, photo) => {
-    const MAX_PER_PAGE = 4;
-    setData((d) => ({
-      ...d,
-      countries: d.countries.map((c) => {
-        if (c.id !== countryId) return c;
-        if (targetPageId === "__new__") {
-          return { ...c, pages: [...c.pages, mkPage([{ ...photo, id: uid("ph") }])] };
-        }
-        const newPages = [];
-        for (const pg of c.pages) {
-          if (pg.id !== targetPageId) {
-            newPages.push(pg);
-            continue;
-          }
-          const combined = [...pg.photos, { ...photo, id: uid("ph") }];
-          if (combined.length <= MAX_PER_PAGE) {
-            newPages.push({ ...pg, photos: combined });
-          } else {
-            // Page pleine : le trop-plein bascule automatiquement sur une nouvelle page
-            newPages.push({ ...pg, photos: combined.slice(0, MAX_PER_PAGE) });
-            newPages.push(mkPage(combined.slice(MAX_PER_PAGE)));
-          }
-        }
-        return { ...c, pages: newPages };
-      }),
-    }));
-  };
-
-  const addBulkPages = (countryId, newPages) => {
-    setData((d) => ({
-      ...d,
-      countries: d.countries.map((c) => (c.id === countryId ? { ...c, pages: [...c.pages, ...newPages] } : c)),
-    }));
-  };
-
-  const updatePhoto = (countryId, photoId, patch) => {
-    setData((d) => ({
-      ...d,
-      countries: d.countries.map((c) =>
-        c.id !== countryId ? c : {
-          ...c,
-          pages: c.pages.map((pg) => ({
-            ...pg,
-            photos: pg.photos.map((p) => (p.id === photoId ? { ...p, ...patch } : p)),
-          })),
-        }
-      ),
-    }));
-  };
-
-  const deletePhoto = (countryId, photoId) => {
-    setData((d) => ({
-      ...d,
-      countries: d.countries.map((c) =>
-        c.id !== countryId ? c : {
-          ...c,
-          pages: c.pages
-            .map((pg) => ({ ...pg, photos: pg.photos.filter((p) => p.id !== photoId) }))
-            .filter((pg) => pg.photos.length > 0),
-        }
-      ),
-    }));
-    setPageIndex((i) => Math.max(0, Math.min(i, (activeCountry?.pages.length || 1) - 2)));
-  };
-
-  const addCountry = (country) => {
-    setData((d) => ({ ...d, countries: [...d.countries, { ...country, id: uid("c"), story: "", cities: [], border: [], tileImage: "", pages: [] }] }));
-  };
-
-  const deleteCountry = (countryId) => {
-    setData((d) => ({ ...d, countries: d.countries.filter((c) => c.id !== countryId) }));
-  };
-
-  const updateProfile = (patch) => setData((d) => ({ ...d, profile: { ...d.profile, ...patch } }));
-
-  const updateCountryCover = (countryId, patch) => {
-    setData((d) => ({
-      ...d,
-      countries: d.countries.map((c) => (c.id === countryId ? { ...c, ...patch } : c)),
-    }));
-  };
-
-  const updateCountryTile = (countryId, tileImage) => {
-    setData((d) => ({
-      ...d,
-      countries: d.countries.map((c) => (c.id === countryId ? { ...c, tileImage } : c)),
-    }));
-  };
-
-  const totalPhotos = data.countries.reduce((n, c) => n + c.pages.reduce((m, pg) => m + pg.photos.length, 0), 0);
-
-  return (
-    <div style={styles.app}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Alex+Brush&family=Yellowtail&family=Anton&family=Kaushan+Script&family=Work+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        * { box-sizing: border-box; }
-        body { margin:0; }
-        .thumb-btn { cursor:pointer; border:none; padding:0; background:none; }
-        ::selection { background:#8B5E3455; }
-        @keyframes dashspin { to { stroke-dashoffset: -200; } }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(14px);} to {opacity:1; transform:translateY(0);} }
-        @keyframes bob { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(6px);} }
-        @keyframes heroPhotoIn { from { opacity: 0; transform: scale(1.08); } to { opacity: 0.85; transform: scale(1); } }
-        @keyframes heroNameIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        .hero-photo-in { animation: heroPhotoIn 5s cubic-bezier(0.22, 1, 0.36, 1) both; will-change: opacity, transform; }
-        .hero-name-in { opacity: 0; animation: heroNameIn 2.4s ease-out 2.2s both; }
-        .hero-name-in-delay { animation-delay: 2.9s; }
-        .hero-phrase-delay { animation-delay: 3.6s; }
-        .hero-cta-delay { animation-delay: 4.3s; }
-        @media (prefers-reduced-motion: reduce) {
-          .globe-line, .cta-bob, .hero-photo-in, .hero-name-in { animation: none !important; opacity: 1 !important; }
-        }
-      `}</style>
-
-      <div style={{ display: view === "home" ? "block" : "none" }}>
-        <Hero profile={data.profile} onStart={scrollToIndex} />
-        <IndexSection
-          ref={indexRef}
-          countries={data.countries}
-          onSelect={openCountry}
-          isAdmin={isAdmin}
-          onDelete={(id, name) => {
-            if (window.confirm(`Supprimer ${name} et toutes ses photos ?`)) deleteCountry(id);
-          }}
-          onEditTile={(id) => setEditingTileCountryId(id)}
-        />
-      </div>
-
-      {view === "journal" && activeCountry && (
-        <Journal
-          country={activeCountry}
-          pages={pages}
-          pageIndex={pageIndex}
-          currentPage={currentPage}
-          onClose={closeJournal}
-          onBackIndex={returnToHome}
-          onNext={nextPage}
-          onPrev={prevPage}
-          onJump={setPageIndex}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
-          zoomedPhoto={zoomedPhoto}
-          setZoomedPhoto={setZoomedPhoto}
-          isAdmin={isAdmin}
-          onEditPhoto={setEditingPhoto}
-          onDeletePhoto={(pid) => deletePhoto(activeCountry.id, pid)}
-          onRequestAddPhoto={() => setShowAddPhoto(true)}
-          onRequestBulkUpload={() => setShowBulkUpload(true)}
-          onEditCover={() => setShowEditCover(true)}
-        />
-      )}
-
-      <button
-        aria-label="Espace administrateur"
-        onClick={() => (isAdmin ? setIsAdmin(false) : setShowPinModal(true))}
-        style={styles.adminFab}
-        title={isAdmin ? "Quitter le mode admin" : "Mode admin"}
-      >
-        {isAdmin ? "🔓" : "🔒"}
-      </button>
-
-      {isAdmin && view === "home" && (
-        <div style={styles.adminHomeBar}>
-          <button style={styles.smallGhostBtn} onClick={() => setShowAddCountry(true)}>+ Pays</button>
-          <button style={styles.smallGhostBtn} onClick={() => setShowEditProfile(true)}>✎ Profil</button>
-        </div>
-      )}
-
-      {showPinModal && (
-        <Modal onClose={() => { setShowPinModal(false); setPinInput(""); setPinError(false); }}>
-          <h3 style={styles.modalTitle}>Code administrateur</h3>
-          <input type="password" inputMode="numeric" value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)} style={styles.input}
-            placeholder="Code à 4 chiffres" autoFocus />
-          {pinError && <p style={{ color: "#C9A876", fontSize: 13, margin: "6px 0 0" }}>Code incorrect.</p>}
-          <button style={styles.primaryBtn} onClick={checkPin}>Valider</button>
-        </Modal>
-      )}
-
-      {showAddPhoto && activeCountry && (
-        <PhotoFormModal
-          title={`Ajouter une photo — ${activeCountry.name}`}
-          pages={activeCountry.pages}
-          onClose={() => setShowAddPhoto(false)}
-          onSubmit={({ pageId, ...photo }) => { addPhotoToPage(activeCountry.id, pageId, photo); setShowAddPhoto(false); }}
-        />
-      )}
-
-      {showBulkUpload && activeCountry && (
-        <BulkUploadModal
-          countryName={activeCountry.name}
-          onClose={() => setShowBulkUpload(false)}
-          onDone={(newPages) => { addBulkPages(activeCountry.id, newPages); }}
-        />
-      )}
-
-      {editingPhoto && (
-        <PhotoFormModal
-          title="Modifier la photo"
-          initial={editingPhoto}
-          onClose={() => setEditingPhoto(null)}
-          onSubmit={(patch) => { updatePhoto(activeCountry.id, editingPhoto.id, patch); setEditingPhoto(null); }}
-        />
-      )}
-
-      {showAddCountry && (
-        <CountryFormModal onClose={() => setShowAddCountry(false)}
-          onSubmit={(c) => { addCountry(c); setShowAddCountry(false); }} />
-      )}
-
-      {showEditProfile && (
-        <ProfileFormModal profile={data.profile} onClose={() => setShowEditProfile(false)}
-          onSubmit={(patch) => { updateProfile(patch); setShowEditProfile(false); }} />
-      )}
-
-      {showEditCover && activeCountry && (
-        <CoverEditModal
-          country={activeCountry}
-          onClose={() => setShowEditCover(false)}
-          onSubmit={(patch) => { updateCountryCover(activeCountry.id, patch); setShowEditCover(false); }}
-        />
-      )}
-
-      {editingTileCountryId && (
-        <TileImageModal
-          country={data.countries.find((c) => c.id === editingTileCountryId)}
-          onClose={() => setEditingTileCountryId(null)}
-          onSubmit={(url) => { updateCountryTile(editingTileCountryId, url); setEditingTileCountryId(null); }}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ---------------- HERO ---------------- */
-function createSoftReverb(ctx, duration = 2.2, decay = 3.2) {
-  const rate = ctx.sampleRate;
-  const length = Math.floor(rate * duration);
-  const impulse = ctx.createBuffer(2, length, rate);
-  for (let ch = 0; ch < 2; ch++) {
-    const data = impulse.getChannelData(ch);
-    for (let i = 0; i < length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
-    }
-  }
-  const convolver = ctx.createConvolver();
-  convolver.buffer = impulse;
-  return convolver;
-}
-
-function makeNoiseBuffer(ctx, duration) {
-  const length = Math.floor(ctx.sampleRate * duration);
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
-  return buffer;
-}
-
-function playIntroSting() {
+async function loadList(key, fallback) {
   try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const now = ctx.currentTime;
-
-    // Bus de sortie avec une réverbe légère, pour un rendu chaleureux mais clair
-    const dry = ctx.createGain(); dry.gain.value = 0.95;
-    const wet = ctx.createGain(); wet.gain.value = 0.3;
-    const reverb = createSoftReverb(ctx, 1.8, 2.8);
-    const bus = ctx.createGain();
-    bus.connect(dry).connect(ctx.destination);
-    bus.connect(wet).connect(reverb).connect(ctx.destination);
-
-    // Un carillon clair et chaleureux, façon "bienvenue"
-    const chimeNote = (freq, start, peak) => {
-      const partials = [1, 2, 3];
-      partials.forEach((mult, i) => {
-        const osc = ctx.createOscillator();
-        osc.type = "sine";
-        osc.frequency.value = freq * mult;
-        const gain = ctx.createGain();
-        const p = peak / (i + 1.5);
-        gain.gain.setValueAtTime(0, start);
-        gain.gain.linearRampToValueAtTime(p, start + 0.012);
-        gain.gain.exponentialRampToValueAtTime(0.0005, start + 1.5 - i * 0.15);
-        osc.connect(gain).connect(bus);
-        osc.start(start);
-        osc.stop(start + 1.6);
-      });
-    };
-
-    // Petite montée joyeuse, façon accueil : Do - Mi - Sol - Do (aigu)
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    notes.forEach((freq, i) => chimeNote(freq, now + i * 0.15, 0.24));
-
-    setTimeout(() => ctx.close(), 2600);
-  } catch (e) {
-    console.error("Son non disponible", e);
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`,
+      { headers: SB_HEADERS }
+    );
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) return data[0].value;
+    return fallback;
+  } catch {
+    return undefined;
   }
 }
 
-function Hero({ profile, onStart }) {
-  const [photoReady, setPhotoReady] = useState(false);
-  const handleStart = () => {
-    playIntroSting();
-    onStart();
-  };
-  return (
-    <header style={styles.hero}>
-      <div style={styles.heroPhotoWrap}>
-        {profile.photoUrl ? (
-          <img
-            src={profile.photoUrl}
-            alt=""
-            style={{ ...styles.heroPhoto, opacity: photoReady ? undefined : 0 }}
-            className={photoReady ? "hero-photo-in" : undefined}
-            onLoad={() => setPhotoReady(true)}
-            draggable={false}
-          />
-        ) : null}
-        <div style={styles.heroOverlay} />
-      </div>
+async function saveList(key, value) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/app_data`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({ key, value }),
+    });
+  } catch (e) {
+    console.error("Erreur de sauvegarde", e);
+  }
+}
 
-      {/* Nom géant semi-transparent, qui traverse le visage façon couverture magazine */}
-      <div style={styles.heroNameLayer}>
-        <span style={styles.heroGiantName} className="hero-name-in">{profile.prenom}</span>
-        <span style={{ ...styles.heroGiantName, ...styles.heroGiantNameLast }} className="hero-name-in hero-name-in-delay">{profile.nom}</span>
-      </div>
-
-      <div style={styles.heroBottom}>
-        <p style={styles.heroPhrase} className="hero-name-in hero-phrase-delay">{profile.phrase}</p>
-        <div className="hero-name-in hero-cta-delay">
-          <button className="cta-bob" style={styles.ctaBtn} onClick={handleStart}>
-            Mon monde commence ici
-            <span style={{ display: "block", marginTop: 6 }}>↓</span>
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error("App error:", error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-stone-50 px-6">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h2 className="font-semibold text-stone-800 mb-2">Erreur temporaire</h2>
+          <p className="text-stone-500 text-sm text-center mb-2">Une erreur s'est produite. Clique sur Retour pour recommencer.</p>
+          <p className="text-red-400 text-[10px] text-center mb-6 max-w-xs break-words">{this.state.error?.message || ""}</p>
+          <button onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+            className="bg-amber-700 text-white rounded-xl px-6 py-3 font-medium">
+            ← Retour
           </button>
         </div>
-      </div>
-    </header>
-  );
+      );
+    }
+    return this.props.children;
+  }
 }
 
-/* ---------------- 3D INTERACTIVE GLOBE ---------------- */
-/* ---------------- 3D INTERACTIVE GLOBE ---------------- */
+export default function StockApp() {
+  const [ready, setReady] = useState(false);
+  const [users, setUsers] = useState(DEFAULT_USERS);
+  const [pins, setPins] = useState(DEFAULT_PINS);
+  const [catalogue, setCatalogue] = useState(DEFAULT_CATALOGUE);
+  const [requests, setRequests] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [cashRequests, setCashRequests] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null); // full user object
+  const [verified, setVerified] = useState(false);
+  const [view, setView] = useState("home");
 
-// Normalise pour comparer les noms de pays (accents, casse, variantes)
-function normCountry(name) {
-  return (name || "")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().trim();
-}
+  // Derived convenience
+  const isVladimir = currentUser?.name === "Vladimir";
+  const role = isVladimir ? "manager" : (currentUser?.role || null);
+  const currentEmployee = currentUser?.name || null;
+  const employees = users.filter((u) => u.role === "employe").map((u) => u.name);
 
-// Quelques alias FR -> EN pour faire correspondre tes noms aux données mondiales
-const COUNTRY_ALIASES = {
-  "argentine": "argentina",
-  "italie": "italy",
-  "japon": "japan",
-  "perou": "peru",
-  "thailande": "thailand",
-  "grece": "greece",
-  "espagne": "spain",
-  "etats-unis": "united states of america",
-  "royaume-uni": "united kingdom",
-  "allemagne": "germany",
-  "bresil": "brazil",
-  "maroc": "morocco",
-  "egypte": "egypt",
-  "suisse": "switzerland",
-  "portugal": "portugal",
-  "croatie": "croatia",
-  "turquie": "turkey",
-  "mexique": "mexico",
-  "canada": "canada",
-  "islande": "iceland",
-  "irlande": "ireland",
-  "norvege": "norway",
-  "suede": "sweden",
-  "pays-bas": "netherlands",
-  "belgique": "belgium",
-  "autriche": "austria",
-  "pologne": "poland",
-  "chine": "china",
-  "inde": "india",
-  "indonesie": "indonesia",
-  "vietnam": "vietnam",
-  "cambodge": "cambodia",
-  "afrique du sud": "south africa",
-  "slovaquie": "slovakia",
-  "republique tcheque": "czechia",
-  "tchequie": "czechia",
-  "republique tcheque (tchequie)": "czechia",
-  "bresil": "brazil",
-  "cap-vert": "cape verde",
-  "cap vert": "cape verde",
-  "chypre": "cyprus",
-};
-
-// Variantes possibles du même pays dans différentes bases de données mondiales
-const COUNTRY_VARIANTS = {
-  "czechia": ["czechia", "czech republic", "czech rep."],
-  "slovakia": ["slovakia", "slovak republic"],
-  "brazil": ["brazil", "brasil"],
-  "united states of america": ["united states of america", "united states", "usa"],
-  "united kingdom": ["united kingdom", "uk", "great britain"],
-  "cape verde": ["cape verde", "cabo verde"],
-  "cyprus": ["cyprus", "northern cyprus", "n. cyprus"],
-};
-
-function matchesCountry(featureName, userName) {
-  const f = normCountry(featureName);
-  const u = normCountry(userName);
-  if (f === u) return true;
-
-  // Résout l'alias FR -> EN si présent
-  const target = COUNTRY_ALIASES[u] ? normCountry(COUNTRY_ALIASES[u]) : u;
-  if (f === target) return true;
-
-  // Vérifie les variantes connues du nom cible
-  const variants = COUNTRY_VARIANTS[target];
-  if (variants && variants.some((v) => normCountry(v) === f)) return true;
-
-  return false;
-}
-
-function Globe({ countries, onSelect }) {
-  const containerRef = useRef(null);
-  const globeRef = useRef(null);
-  const [features, setFeatures] = useState([]);
-  const onSelectRef = useRef(onSelect);
-  const countriesRef = useRef(countries);
-  onSelectRef.current = onSelect;
-  countriesRef.current = countries;
-
-  // On ne garde que les pays visités (globe fluide), surlignés et cliquables.
   useEffect(() => {
-    let cancelled = false;
     (async () => {
-      try {
-        const topojson = await import("https://cdn.jsdelivr.net/npm/topojson-client@3/+esm");
-        const detailed = await fetch("https://unpkg.com/world-atlas@2.0.2/countries-50m.json").then((r) => r.json());
-        if (cancelled) return;
-        const all = topojson.feature(detailed, detailed.objects.countries).features;
-        const visitedOnly = all.filter((feat) =>
-          countriesRef.current.some((c) => matchesCountry(feat.properties.name, c.name))
-        );
-        setFeatures(visitedOnly);
-      } catch (e) {
-        console.error("Échec du chargement des frontières", e);
+      async function loadOrInit(key, fallback) {
+        const res = await loadList(key, null);
+        if (res !== null && res !== undefined) return res;
+        await saveList(key, fallback);
+        return fallback;
       }
+      const [u, p, c, r, h, m] = await Promise.all([
+        loadOrInit(EMPLOYEES_KEY, DEFAULT_USERS),
+        loadOrInit(PINS_KEY, DEFAULT_PINS),
+        loadOrInit(CATALOGUE_KEY, DEFAULT_CATALOGUE),
+        loadOrInit(REQUESTS_KEY, []),
+        loadOrInit(HISTORY_KEY, []),
+        loadOrInit(CASH_KEY, []),
+      ]);
+      setUsers(u);
+      setPins(p);
+      setCatalogue(c);
+      setRequests(r);
+      setHistory(h);
+      setCashRequests(m);
+      setReady(true);
     })();
-    return () => { cancelled = true; };
-  }, [countries]);
+  }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const width = containerRef.current.clientWidth;
-    const height = Math.min(width, 380);
+    if (!ready) return;
+    const id = setInterval(async () => {
+      const [r, h, c, u, p, m] = await Promise.all([
+        loadList(REQUESTS_KEY, []),
+        loadList(HISTORY_KEY, []),
+        loadList(CATALOGUE_KEY, DEFAULT_CATALOGUE),
+        loadList(EMPLOYEES_KEY, DEFAULT_USERS),
+        loadList(PINS_KEY, DEFAULT_PINS),
+        loadList(CASH_KEY, []),
+      ]);
+      if (r !== undefined) setRequests(r);
+      if (h !== undefined) setHistory(h);
+      if (c !== undefined) setCatalogue(c);
+      if (u !== undefined) setUsers(u);
+      if (p !== undefined) setPins(p);
+      if (m !== undefined) setCashRequests(m);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [ready]);
 
-    const globe = Globe3D()(containerRef.current)
-      .width(width)
-      .height(height)
-      .backgroundColor("rgba(0,0,0,0)")
-      .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
-      .atmosphereColor("#8FC7E8")
-      .atmosphereAltitude(0.16);
-
-    // Limite la densité de pixels : énorme gain de fluidité sur mobile (GPU moins sollicité)
+  async function addRequest(articleId, quantite, nomLibre) {
     try {
-      const renderer = globe.renderer();
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-    } catch (e) { /* ignore */ }
-
-    const findCountry = (feat) => countriesRef.current.find((c) => matchesCountry(feat.properties.name, c.name));
-
-    globe
-      .polygonsData([])
-      .polygonsTransitionDuration(0)
-      .polygonCapColor(() => "#D4A24Cee")
-      .polygonSideColor(() => "#00000000")
-      .polygonStrokeColor(() => "#F4EFE7")
-      .polygonAltitude(() => 0.014)
-      .onPolygonClick((feat) => {
-        const c = findCountry(feat);
-        if (c) onSelectRef.current(c.id);
-      })
-      .polygonLabel((feat) => `<div style="color:#F4EFE7;font-family:sans-serif;font-size:13px;font-weight:600;text-shadow:0 1px 3px #000">${feat.properties.name}</div>`);
-
-    const controls = globe.controls();
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.35;
-    controls.enableZoom = true;
-    controls.enableDamping = true;      // inertie fluide au relâchement
-    controls.dampingFactor = 0.12;
-    controls.minDistance = 101;
-    controls.maxDistance = 600;
-    controls.zoomSpeed = 2;
-    controls.rotateSpeed = 0.85;
-    const stopAuto = () => { controls.autoRotate = false; };
-    containerRef.current.addEventListener("pointerdown", stopAuto);
-
-    globeRef.current = globe;
-
-    // Met en pause le rendu du globe dès qu'il n'est plus visible à l'écran
-    // (quand on scrolle vers les albums) → libère complètement le téléphone
-    let visible = true;
-    const setRunning = (run) => {
-      try {
-        if (run) {
-          globe.resumeAnimation && globe.resumeAnimation();
-        } else {
-          globe.pauseAnimation && globe.pauseAnimation();
-        }
-      } catch (e) { /* ignore */ }
+      const newReq = { id: uid(), articleId: articleId || null, quantite, nomLibre: nomLibre || null, isNouveau: !articleId, par: currentEmployee, date: new Date().toISOString() };
+      const updated = [...requests, newReq];
+      setRequests(updated);
+      await saveList(REQUESTS_KEY, updated);
+    } catch(e) {
+      console.error("addRequest error:", e);
+    }
+  }
+  async function updateRequestQty(id, quantite) {
+    const updated = requests.map((r) => (r.id === id ? { ...r, quantite } : r));
+    setRequests(updated);
+    await saveList(REQUESTS_KEY, updated);
+  }
+  async function updateRequestComment(id, commentaire) {
+    const updated = requests.map((r) => (r.id === id ? { ...r, commentaire } : r));
+    setRequests(updated);
+    await saveList(REQUESTS_KEY, updated);
+  }
+  async function removeRequest(id) {
+    const updated = requests.filter((r) => r.id !== id);
+    setRequests(updated);
+    await saveList(REQUESTS_KEY, updated);
+  }
+  async function validateOrder(selectedIds = null) {
+    const toValidate = selectedIds ? requests.filter((r) => selectedIds.includes(r.id)) : requests;
+    if (toValidate.length === 0) return;
+    const remaining = selectedIds ? requests.filter((r) => !selectedIds.includes(r.id)) : [];
+    const order = {
+      id: uid(),
+      date: new Date().toISOString(),
+      articles: toValidate.map((r) => ({ ...r, recu: false })),
     };
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry.isIntersecting;
-        setRunning(visible);
-      },
-      { threshold: 0.1 }
+    const updatedHistory = [order, ...history];
+    setHistory(updatedHistory);
+    setRequests(remaining);
+    await Promise.all([saveList(HISTORY_KEY, updatedHistory), saveList(REQUESTS_KEY, remaining)]);
+  }
+
+  async function toggleReceived(orderId, articleId, actor, quantiteRecue) {
+    const now = new Date().toISOString();
+    let updatedHistory = history.map((order) =>
+      order.id !== orderId
+        ? order
+        : {
+            ...order,
+            articles: order.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const partielle = quantiteRecue !== undefined && quantiteRecue < a.quantite;
+              if (!a.recuPar) {
+                return {
+                  ...a,
+                  recu: true,
+                  recuPar: actor,
+                  recuDate: now,
+                  quantiteRecue: quantiteRecue !== undefined ? quantiteRecue : a.quantite,
+                  livraisonPartielle: partielle,
+                  manquant: partielle ? a.quantite - quantiteRecue : 0,
+                };
+              }
+              return { ...a, recu: !a.recu, corrigePar: actor, corrigeDate: now };
+            }),
+          }
     );
-    observer.observe(containerRef.current);
 
-    // Met aussi en pause quand l'onglet est en arrière-plan
-    const onVisibility = () => setRunning(visible && !document.hidden);
-    document.addEventListener("visibilitychange", onVisibility);
-
-    const handleResize = () => {
-      if (!containerRef.current) return;
-      const w = containerRef.current.clientWidth;
-      globe.width(w).height(Math.min(w, 380));
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      document.removeEventListener("visibilitychange", onVisibility);
-      observer.disconnect();
-      containerRef.current?.removeEventListener("pointerdown", stopAuto);
-      globeRef.current = null;
-      if (containerRef.current) containerRef.current.innerHTML = "";
-    };
-  }, []);
-
-  // Applique les frontières (uniquement les pays visités, dorés et cliquables)
-  useEffect(() => {
-    if (!globeRef.current) return;
-    globeRef.current
-      .polygonsData(features)
-      .polygonCapColor(() => "#D4A24Cee")
-      .polygonStrokeColor(() => "#F4EFE7")
-      .polygonAltitude(() => 0.014);
-  }, [features]);
-
-  return <div ref={containerRef} style={styles.globe3d} />;
-}
-
-/* ---------------- INDEX SECTION ---------------- */
-const IndexSection = React.forwardRef(({ countries, onSelect, isAdmin, onDelete, onEditTile }, ref) => {
-  const [showGlobe, setShowGlobe] = useState(false);
-  useEffect(() => {
-    // On laisse d'abord l'accueil (photo + nom) s'afficher, puis on monte le globe
-    const t = setTimeout(() => setShowGlobe(true), 800);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <section ref={ref} style={styles.indexSection}>
-      <div style={styles.globeWrap}>
-        {showGlobe ? (
-          <Globe countries={countries} onSelect={onSelect} />
-        ) : (
-          <div style={{ ...styles.globe3d, minHeight: 300 }} />
-        )}
-      </div>
-      <p style={styles.indexEyebrow}>Index des destinations</p>
-      <div style={styles.tileGrid}>
-        {countries.map((c) => {
-          const photoCount = c.pages.reduce((n, pg) => n + pg.photos.length, 0);
-          return (
-            <div key={c.id} style={styles.tile}>
-              <button style={styles.tileBtn} onClick={() => onSelect(c.id)} aria-label={c.name}>
-                {c.tileImage ? (
-                  <img src={c.tileImage} alt="" style={styles.tileImg} />
-                ) : (
-                  <div style={styles.tileFallback} />
-                )}
-                <div style={styles.tileOverlay} />
-                <span style={styles.tileName}>{c.name}</span>
-                <span style={styles.tileCount}>{photoCount}</span>
-              </button>
-              {isAdmin && (
-                <div style={styles.tileAdminBar}>
-                  <button style={styles.tileIconBtn} onClick={() => onEditTile(c.id)} title="Changer l'image">✎</button>
-                  <button style={styles.tileIconBtn} onClick={() => onDelete(c.id, c.name)} title="Supprimer">🗑</button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-});
-
-/* ---------------- JOURNAL ---------------- */
-function Journal({
-  country, pages, pageIndex, currentPage, onClose, onBackIndex, onNext, onPrev, onJump,
-  onTouchStart, onTouchEnd, zoomedPhoto, setZoomedPhoto, isAdmin, onEditPhoto, onDeletePhoto, onRequestAddPhoto, onRequestBulkUpload, onEditCover,
-}) {
-  const isCover = pageIndex === -1;
-  const totalWithCover = pages.length + 1;
-  const displayIndex = pageIndex + 1; // cover = 0
-
-  return (
-    <div style={styles.journalOverlay} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <JournalTopBar country={country} onBackIndex={onBackIndex}
-        pageIndex={displayIndex} total={totalWithCover} isCover={isCover} />
-
-      <div style={styles.journalPage}>
-        {isCover ? (
-          <CoverPage country={country} isAdmin={isAdmin} onEdit={onEditCover} />
-        ) : pages.length === 0 ? (
-          <div style={{ textAlign: "center" }}>
-            <p style={styles.emptyState}>Aucune photo pour l'instant. {isAdmin ? "Ajoutez-en une." : ""}</p>
-            {isAdmin && (
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                <button style={styles.addPhotoBtn} onClick={onRequestAddPhoto}>+ Ajouter une photo</button>
-                <button style={styles.addPhotoBtn} onClick={onRequestBulkUpload}>+ Plusieurs photos</button>
-              </div>
-            )}
-          </div>
-        ) : currentPage.photos.length === 1 ? (
-          <SinglePhoto photo={currentPage.photos[0]} isAdmin={isAdmin} onEdit={onEditPhoto} onDelete={onDeletePhoto} />
-        ) : (
-          <MosaicPage photos={currentPage.photos} isAdmin={isAdmin} onEdit={onEditPhoto}
-            onDelete={onDeletePhoto} onZoom={setZoomedPhoto} />
-        )}
-      </div>
-
-      <button style={{ ...styles.pageArrow, left: 4 }} onClick={onPrev} disabled={pageIndex === -1} aria-label="Page précédente">‹</button>
-      <button style={{ ...styles.pageArrow, right: 4 }} onClick={onNext} disabled={pageIndex === Math.max(pages.length - 1, 0)} aria-label="Page suivante">›</button>
-
-      <div style={styles.pageDots}>
-        <button onClick={() => onJump(-1)}
-          style={{ ...styles.pageDot, background: isCover ? "#C9A876" : "#4a463f" }} aria-label="Page de couverture" />
-        {pages.map((pg, i) => (
-          <button key={pg.id} onClick={() => onJump(i)}
-            style={{ ...styles.pageDot, background: i === pageIndex ? "#C9A876" : "#4a463f" }} aria-label={`Page ${i + 1}`} />
-        ))}
-      </div>
-
-      {isAdmin && !isCover && (
-        <div style={styles.floatingBtnGroup}>
-          <button style={styles.addPhotoFloating} onClick={onRequestBulkUpload}>+ Plusieurs</button>
-          <button style={styles.addPhotoFloating} onClick={onRequestAddPhoto}>+ Photo</button>
-        </div>
-      )}
-
-      {zoomedPhoto && (
-        <div style={styles.zoomOverlay} onClick={() => setZoomedPhoto(null)}>
-          <Media item={zoomedPhoto} style={styles.zoomImg} />
-          {zoomedPhoto.caption && <p style={styles.lightboxCaption}>{zoomedPhoto.caption}</p>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function JournalTopBar({ country, onBackIndex, pageIndex, total, isCover }) {
-  return (
-    <div style={styles.journalTopBar}>
-      <button style={styles.backBtn} onClick={onBackIndex}>← Retour par pays</button>
-      <span style={styles.journalCounter}>
-        {country.name.toUpperCase()} · {isCover ? "Carte" : `${pageIndex}/${total - 1}`}
-      </span>
-    </div>
-  );
-}
-
-/* ---------------- COVER PAGE ---------------- */
-function CoverPage({ country, isAdmin, onEdit }) {
-  const hasCities = country.cities && country.cities.length > 0;
-  const hasBorder = country.border && country.border.length > 0;
-  return (
-    <div style={styles.coverWrap}>
-      <h2 style={styles.coverTitle}>{country.name}</h2>
-
-      {(hasCities || hasBorder) && <CountryMap cities={country.cities || []} border={country.border || []} />}
-
-      {country.story ? (
-        <p style={styles.coverStory}>{country.story}</p>
-      ) : (
-        <p style={{ ...styles.coverStory, color: "#5b5f58" }}>
-          {isAdmin ? "Aucune histoire écrite pour l'instant." : ""}
-        </p>
-      )}
-
-      {isAdmin && (
-        <button style={styles.editCoverBtn} onClick={onEdit}>✎ Modifier la page pays</button>
-      )}
-    </div>
-  );
-}
-
-function resolveLabelAngles(anglesDeg, minGap = 22) {
-  const n = anglesDeg.length;
-  if (n < 2) return [...anglesDeg];
-  const order = anglesDeg.map((_, i) => i).sort((a, b) => anglesDeg[a] - anglesDeg[b]);
-  let sorted = order.map((i) => anglesDeg[i]);
-  for (let iter = 0; iter < 60; iter++) {
-    let moved = false;
-    for (let k = 0; k < n; k++) {
-      const j = (k + 1) % n;
-      let gap = sorted[j] - sorted[k];
-      if (j === 0) gap += 360;
-      if (gap < minGap) {
-        const shift = (minGap - gap) / 2;
-        sorted[k] -= shift;
-        sorted[j] += shift;
-        moved = true;
+    // If partial delivery, add a residual entry to history
+    if (quantiteRecue !== undefined) {
+      const origOrder = history.find(o => o.id === orderId);
+      const origArticle = origOrder?.articles.find(a => a.id === articleId);
+      if (origArticle && quantiteRecue < origArticle.quantite) {
+        const manquant = origArticle.quantite - quantiteRecue;
+        const origDate = origOrder.date;
+        const dateLabel = new Date(origDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+        const resteEntry = {
+          ...origArticle,
+          id: uid(),
+          quantite: manquant,
+          recu: false,
+          recuPar: null,
+          recuDate: null,
+          isReste: true,
+          resteDepuis: dateLabel,
+          date: now,
+        };
+        // Add to a new order entry so it shows in attente
+        const resteOrder = {
+          id: uid(),
+          date: now,
+          articles: [resteEntry],
+        };
+        updatedHistory = [resteOrder, ...updatedHistory];
       }
     }
-    if (!moved) break;
+
+    setHistory(updatedHistory);
+    await saveList(HISTORY_KEY, updatedHistory);
   }
-  const result = new Array(n);
-  order.forEach((originalIndex, k) => { result[originalIndex] = sorted[k]; });
-  return result;
-}
 
-function truncateName(name, max = 13) {
-  return name.length > max ? name.slice(0, max - 1) + "…" : name;
-}
+  async function updateHistoryComment(orderId, articleId, commentaire) {
+    const updated = history.map((order) =>
+      order.id !== orderId
+        ? order
+        : { ...order, articles: order.articles.map((a) => (a.id === articleId ? { ...a, commentaire } : a)) }
+    );
+    setHistory(updated);
+    await saveList(HISTORY_KEY, updated);
+  }
 
-function CountryMap({ cities, border }) {
-  const W = 320, H = 320, PAD = 78;
+  async function clearHistory(dayLabel) {
+    let updated;
+    if (dayLabel) {
+      // Delete only delivered orders from a specific day
+      updated = history.filter(order => {
+        const d = new Date(order.date);
+        const label = d.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+        const allReceived = order.articles.every(a => a.recu);
+        return !(label === dayLabel && allReceived);
+      });
+    } else {
+      // Delete only fully received orders
+      updated = history.filter(order => !order.articles.every(a => a.recu));
+    }
+    setHistory(updated);
+    await saveList(HISTORY_KEY, updated);
+  }
 
-  // Normalise: ancien format = liste plate de points (une seule île),
-  // nouveau format = liste d'îles, chacune une liste de points.
-  const rings = (() => {
-    if (!border || border.length === 0) return [];
-    return typeof border[0].lat === "number" ? [border] : border;
-  })();
-  const hasBorder = rings.length > 0;
-  const allBorderPts = rings.flat();
+  async function addCashRequest(lines, total, requester) {
+    const newReq = { id: uid(), par: requester, date: new Date().toISOString(), lines, total, livre: false };
+    const updated = [...cashRequests, newReq];
+    setCashRequests(updated);
+    await saveList(CASH_KEY, updated);
+  }
 
-  // Le cadrage prend en compte la frontière (toutes les îles) ET les villes,
-  // pour ne rien couper même si une ville est plus excentrée que le tracé.
-  const framePts = [...allBorderPts, ...cities];
-  const latSource = framePts.map((p) => p.lat);
-  const lonSource = framePts.map((p) => p.lon);
-  const minLat = Math.min(...latSource), maxLat = Math.max(...latSource);
-  const minLon = Math.min(...lonSource), maxLon = Math.max(...lonSource);
-  const spanLat = maxLat - minLat || 1;
-  const spanLon = maxLon - minLon || 1;
+  async function removeCashRequest(id) {
+    const updated = cashRequests.filter((c) => c.id !== id);
+    setCashRequests(updated);
+    await saveList(CASH_KEY, updated);
+  }
 
-  const project = (lat, lon) => ({
-    x: PAD + ((lon - minLon) / spanLon) * (W - PAD * 2),
-    y: PAD + ((maxLat - lat) / spanLat) * (H - PAD * 2),
-  });
+  async function toggleCashDelivered(id, actor) {
+    const updated = cashRequests.map((c) => {
+      if (c.id !== id) return c;
+      const now = new Date().toISOString();
+      if (!c.livrePar) {
+        return { ...c, livre: true, livrePar: actor, livreDate: now };
+      }
+      return { ...c, livre: !c.livre, corrigePar: actor, corrigeDate: now };
+    });
+    setCashRequests(updated);
+    await saveList(CASH_KEY, updated);
+  }
 
-  const points = cities.map((c) => ({ ...c, ...project(c.lat, c.lon) }));
-  const borderPaths = rings.map((ring) =>
-    ring.map((p, i) => { const pt = project(p.lat, p.lon); return `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`; }).join(" ") + " Z"
-  );
+  async function addCatalogueItem(item) {
+    const updated = [...catalogue, { ...item, id: uid() }];
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  async function updateCatalogueItem(id, patch) {
+    const updated = catalogue.map((c) => (c.id === id ? { ...c, ...patch } : c));
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  async function removeCatalogueItem(id) {
+    const updated = catalogue.filter((c) => c.id !== id);
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  async function renameCategory(oldName, newName) {
+    if (!newName.trim() || oldName === newName) return;
+    const updated = catalogue.map((c) => c.category === oldName ? { ...c, category: newName.trim() } : c);
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  async function renameSubcategory(category, oldSub, newSub) {
+    if (!newSub.trim() || oldSub === newSub) return;
+    const updated = catalogue.map((c) => (c.category === category && c.subcategory === oldSub) ? { ...c, subcategory: newSub.trim() } : c);
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  // Move an entire category into another category, becoming a subcategory there
+  async function moveCategoryInto(sourceCat, targetCat, newSubName) {
+    if (sourceCat === targetCat) return;
+    const subLabel = (newSubName && newSubName.trim()) || sourceCat;
+    const updated = catalogue.map((c) =>
+      c.category === sourceCat ? { ...c, category: targetCat, subcategory: subLabel } : c
+    );
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  // Move a subcategory into another category (keeping or renaming the subcategory)
+  async function moveSubcategoryInto(sourceCat, sourceSub, targetCat, newSubName) {
+    const subLabel = (newSubName && newSubName.trim()) || sourceSub;
+    const updated = catalogue.map((c) =>
+      (c.category === sourceCat && c.subcategory === sourceSub)
+        ? { ...c, category: targetCat, subcategory: subLabel }
+        : c
+    );
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  // Delete an entire category with all its articles
+  async function deleteCategory(cat) {
+    const updated = catalogue.filter((c) => c.category !== cat);
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  // Delete an entire subcategory with all its articles
+  async function deleteSubcategory(cat, sub) {
+    const updated = catalogue.filter((c) => !(c.category === cat && c.subcategory === sub));
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
+  // Remove only the subcategory label - articles move up to parent category (subcategory = "Général")
+  async function dissolveSubcategory(cat, sub) {
+    const updated = catalogue.map((c) =>
+      (c.category === cat && c.subcategory === sub) ? { ...c, subcategory: "Général" } : c
+    );
+    setCatalogue(updated);
+    await saveList(CATALOGUE_KEY, updated);
+  }
 
-  const centerX = W / 2, centerY = H / 2;
-  const labelRadius = W / 2 - 42;
+  async function addUser(name, role) {
+    const newUser = { id: uid(), name: name.trim(), role };
+    const updatedUsers = [...users, newUser];
+    const updatedPins = { ...pins, [newUser.id]: "1234" };
+    setUsers(updatedUsers);
+    setPins(updatedPins);
+    await Promise.all([saveList(EMPLOYEES_KEY, updatedUsers), saveList(PINS_KEY, updatedPins)]);
+    return newUser;
+  }
 
-  const rawAngles = points.map((p) => Math.atan2(p.y - centerY, p.x - centerX) * (180 / Math.PI));
-  const finalAngles = resolveLabelAngles(rawAngles);
+  async function removeUser(userId) {
+    const updatedUsers = users.filter((u) => u.id !== userId);
+    const updatedPins = { ...pins };
+    delete updatedPins[userId];
+    setUsers(updatedUsers);
+    setPins(updatedPins);
+    await Promise.all([saveList(EMPLOYEES_KEY, updatedUsers), saveList(PINS_KEY, updatedPins)]);
+  }
 
-  return (
-    <div style={styles.countryMapWrap}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={styles.countryMapSvg}>
-        {hasBorder && borderPaths.map((d, i) => (
-          <path key={i} d={d} fill="#C9A87622" stroke="#F4EFE7" strokeWidth="1.2" strokeLinejoin="round" />
-        ))}
-        {points.map((p, i) => {
-          const rad = (finalAngles[i] * Math.PI) / 180;
-          const ux = Math.cos(rad), uy = Math.sin(rad);
-          const lx = centerX + ux * labelRadius;
-          const ly = centerY + uy * labelRadius;
-          const anchor = ux > 0.2 ? "start" : ux < -0.2 ? "end" : "middle";
-          return (
-            <g key={p.id}>
-              <line x1={p.x} y1={p.y} x2={lx} y2={ly} stroke="#C9A87699" strokeWidth="0.8" strokeDasharray="1.5 3" />
-              <circle cx={p.x} cy={p.y} r="3.5" fill="#C9A876" />
-              <text x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle"
-                fill="#D9D2C4" fontSize="9" fontFamily="'JetBrains Mono', monospace">
-                {truncateName(p.name)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
+  async function changePin(userId, newPin) {
+    const updatedPins = { ...pins, [userId]: newPin };
+    setPins(updatedPins);
+    await saveList(PINS_KEY, updatedPins);
+  }
 
-function isVideo(item) {
-  return item?.type === "video" || /\.(mp4|webm|mov)$/i.test(item?.src || "");
-}
-
-function Media({ item, style, className }) {
-  if (isVideo(item)) {
+  if (!ready) {
     return (
-      <video
-        src={item.src}
-        style={style}
-        className={className}
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="metadata"
+      <div className="min-h-screen flex items-center justify-center bg-stone-50">
+        <div className="text-stone-400 text-sm tracking-wide">Chargement…</div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <UserSelect
+        users={users}
+        onSelect={(user) => setCurrentUser(user)}
       />
     );
   }
-  return <img src={item.src} alt={item.caption || ""} style={style} className={className} loading="lazy" />;
-}
 
-function SinglePhoto({ photo, isAdmin, onEdit, onDelete }) {
+  if (!verified) {
+    return (
+      <PinEntry
+        label={currentUser.name}
+        correctPin={(pins && currentUser && pins[currentUser.id]) ? pins[currentUser.id] : "1234"}
+        onSuccess={() => setVerified(true)}
+        onBack={() => { setCurrentUser(null); setVerified(false); }}
+      />
+    );
+  }
+
+  // Safety checks - if user data is incomplete, show employee view
+  if (!currentUser || !currentUser.name) {
+    setCurrentUser(null);
+    setVerified(false);
+    return null;
+  }
+
+  const isManager = role === "manager";
+  const isChef = role === "chef" || role === "manager";
+  // Vladimir has full access but displays as regular employee
+
   return (
-    <div style={styles.singleWrap}>
-      <Media item={photo} style={styles.singleImg} />
-      {photo.caption && <p style={styles.singleCaption}>{photo.caption}</p>}
-      {isAdmin && (
-        <div style={styles.thumbAdminBarStatic}>
-          <button style={styles.iconBtn} onClick={() => onEdit(photo)} title="Modifier">✎</button>
-          <button style={styles.iconBtn} onClick={() => onDelete(photo.id)} title="Supprimer">🗑</button>
-        </div>
+    <ErrorBoundary>
+    <div className="min-h-screen bg-stone-50">
+      <Header
+        role={role}
+        currentEmployee={currentEmployee}
+        view={view}
+        isChef={isChef}
+        onBack={() => {
+          setCurrentUser(null);
+          setVerified(false);
+          setView("home");
+        }}
+        onToggleCatalogue={() => setView(view === "catalogue" ? "home" : "catalogue")}
+        onToggleUsers={() => setView(view === "users" ? "home" : "users")}
+        isManager={isManager}
+      />
+      {(role === "employe" || !role) && currentEmployee !== "Vladimir" ? (
+        <EmployeeView
+          catalogue={catalogue}
+          onAddRequest={addRequest}
+          allRequests={requests}
+          history={history}
+          employees={employees}
+          onToggleReceived={toggleReceived}
+          onUpdateComment={updateRequestComment}
+          onUpdateHistoryComment={updateHistoryComment}
+          onRemoveRequest={removeRequest}
+          onUpdateQty={updateRequestQty}
+          currentEmployee={currentEmployee}
+          currentUser={currentUser}
+          pins={pins}
+          onChangePin={changePin}
+          myRequests={requests.filter((r) => r.par === currentEmployee)}
+          cashRequests={cashRequests}
+          onAddCashRequest={addCashRequest}
+          onToggleCashDelivered={toggleCashDelivered}
+          onRemoveCashRequest={removeCashRequest}
+        />
+      ) : view === "catalogue" ? (
+        <CatalogueManager
+          catalogue={catalogue}
+          onAdd={addCatalogueItem}
+          onUpdate={updateCatalogueItem}
+          onRemove={removeCatalogueItem}
+          onRenameCategory={renameCategory}
+          onRenameSubcategory={renameSubcategory}
+          onMoveCategoryInto={moveCategoryInto}
+          onMoveSubcategoryInto={moveSubcategoryInto}
+          onDeleteCategory={deleteCategory}
+          onDeleteSubcategory={deleteSubcategory}
+          onDissolveSubcategory={dissolveSubcategory}
+        />
+      ) : view === "users" ? (
+        <UserManager
+          users={users}
+          pins={pins}
+          currentUser={currentUser}
+          onAddUser={addUser}
+          onRemoveUser={removeUser}
+          onChangePin={changePin}
+        />
+      ) : (
+        <ResponsableView
+          requests={requests}
+          history={history}
+          catalogue={catalogue}
+          employees={employees}
+          onUpdateQty={updateRequestQty}
+          onUpdateComment={updateRequestComment}
+          onUpdateHistoryComment={updateHistoryComment}
+          onRemove={removeRequest}
+          onValidate={validateOrder}
+          onToggleReceived={toggleReceived}
+          onAddRequest={addRequest}
+          onClearHistory={clearHistory}
+          view={view}
+          setView={setView}
+          cashRequests={cashRequests}
+          onToggleCashDelivered={toggleCashDelivered}
+          onRemoveCashRequest={removeCashRequest}
+          currentUser={currentUser}
+          currentEmployee={currentEmployee}
+          pins={pins}
+          onChangePin={changePin}
+        />
       )}
     </div>
+    </ErrorBoundary>
   );
 }
 
-function mosaicSpan(size) {
-  switch (size) {
-    case "wide": return { gridColumn: "span 2" };
-    case "tall": return { gridRow: "span 2" };
-    case "big": return { gridColumn: "span 2", gridRow: "span 2" };
-    default: return {};
-  }
-}
-
-function MosaicPage({ photos, isAdmin, onEdit, onDelete, onZoom }) {
+function GustaveLogo({ size = 100 }) {
   return (
-    <div style={styles.mosaic}>
-      {photos.map((p) => (
-        <div key={p.id} style={{ ...styles.mosaicItem, ...mosaicSpan(p.size) }}>
-          <button className="thumb-btn" style={styles.mosaicBtn} onClick={() => onZoom(p)}>
-            <Media item={p} style={styles.mosaicImg} />
-            {p.caption && <span style={styles.mosaicCaption}>{p.caption}</span>}
-          </button>
-          {isAdmin && (
-            <div style={styles.thumbAdminBar}>
-              <button style={styles.iconBtn} onClick={() => onEdit(p)} title="Modifier">✎</button>
-              <button style={styles.iconBtn} onClick={() => onDelete(p.id)} title="Supprimer">🗑</button>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
+    <svg width={size * 1.5} height={size} viewBox="0 0 180 120" className="mx-auto mb-4">
+      <ellipse cx="90" cy="60" rx="86" ry="56" fill="#78350f" />
+      <ellipse cx="90" cy="60" rx="86" ry="56" fill="none" stroke="#fef3c7" strokeWidth="2" />
+      <ellipse cx="90" cy="60" rx="76" ry="47" fill="none" stroke="#fef3c7" strokeWidth="1" />
+      <text x="90" y="42" textAnchor="middle" fontFamily="Georgia, serif" fontSize="11" letterSpacing="3" fill="#fef3c7">
+        BRASSERIE
+      </text>
+      <text x="90" y="70" textAnchor="middle" fontFamily="Georgia, serif" fontSize="22" fontWeight="700" fill="#fef3c7">
+        Chez Gustave
+      </text>
+      <line x1="55" y1="82" x2="125" y2="82" stroke="#fef3c7" strokeWidth="1" />
+      <text x="90" y="97" textAnchor="middle" fontFamily="Georgia, serif" fontSize="10" letterSpacing="3.5" fill="#fef3c7">
+        GENÈVE
+      </text>
+    </svg>
   );
 }
 
-/* ---------------- MODALS ---------------- */
-function Modal({ children, onClose }) {
-  return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-        {children}
-        <button style={styles.modalClose} onClick={onClose}>Fermer</button>
-      </div>
-    </div>
-  );
-}
+function PinEntry({ label, correctPin, onSuccess, onBack }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
 
-async function compressImage(file, maxDim = 1600, quality = 0.82) {
-  let workingBlob = file;
-  const isHeic = (file.type && /hei[cf]/i.test(file.type)) || /\.hei[cf]$/i.test(file.name || "");
-  if (isHeic) {
-    try {
-      const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
-      workingBlob = Array.isArray(converted) ? converted[0] : converted;
-    } catch (e) {
-      console.error("Échec de conversion HEIC", e);
-      throw new Error("Photo HEIC non convertible");
+  function press(digit) {
+    if (pin.length >= 4) return;
+    const next = pin + digit;
+    setPin(next);
+    setError(false);
+    if (next.length === 4) {
+      if (next === (correctPin || "1234")) {
+        setTimeout(() => onSuccess(), 150);
+      } else {
+        setTimeout(() => { setError(true); setPin(""); }, 300);
+      }
     }
   }
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(workingBlob);
-    const img = new Image();
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
-        else { width = Math.round(width * (maxDim / height)); height = maxDim; }
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, width, height);
-      URL.revokeObjectURL(url);
-      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Échec de compression"))), "image/jpeg", quality);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image illisible")); };
-    img.src = url;
-  });
-}
-
-async function uploadToStorage(fileOrBlob, filename) {
-  const rawName = filename || fileOrBlob.name || "photo.jpg";
-  const dotIndex = rawName.lastIndexOf(".");
-  const ext = dotIndex > -1 ? rawName.slice(dotIndex + 1).toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg" : "jpg";
-  const safeExt = ext.length <= 5 ? ext : "jpg";
-  const path = `${uid("img")}.${safeExt}`;
-  const { error: uploadErr } = await supabase.storage.from("Photos").upload(path, fileOrBlob, {
-    cacheControl: "3600",
-    upsert: false,
-    contentType: fileOrBlob.type || "image/jpeg",
-  });
-  if (uploadErr) throw uploadErr;
-  const { data: pub } = supabase.storage.from("Photos").getPublicUrl(path);
-  return pub.publicUrl;
-}
-
-/* ---------------- IMAGE CROPPER ---------------- */
-function ImageCropper({ file, aspect = 4 / 5, onCancel, onConfirm }) {
-  const [imgUrl, setImgUrl] = useState(null);
-  const [natural, setNatural] = useState({ w: 0, h: 0 });
-  const [loadError, setLoadError] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragState = useRef(null);
-  const frameRef = useRef(null);
-  const FRAME_W = 280;
-  const FRAME_H = Math.round(FRAME_W / aspect);
-
-  useEffect(() => {
-    setLoadError(false);
-    setNatural({ w: 0, h: 0 });
-    const url = URL.createObjectURL(file);
-    setImgUrl(url);
-    const img = new Image();
-    const timeout = setTimeout(() => setLoadError(true), 15000); // évite un blocage infini sur mobile
-    img.onload = () => { clearTimeout(timeout); setNatural({ w: img.naturalWidth, h: img.naturalHeight }); };
-    img.onerror = () => { clearTimeout(timeout); setLoadError(true); };
-    img.src = url;
-    return () => { clearTimeout(timeout); URL.revokeObjectURL(url); };
-  }, [file]);
-
-  if (loadError) {
-    return (
-      <div style={{ ...styles.modalOverlay, zIndex: 90 }}>
-        <div style={styles.modalCard}>
-          <p style={{ color: "#E8785A" }}>
-            Impossible de charger cette photo (fichier trop volumineux ou format non supporté, ex : HEIC).
-            Essaie une autre photo, ou convertis-la en JPEG.
-          </p>
-          <button style={styles.modalClose} onClick={onCancel}>Fermer</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!imgUrl || !natural.w) {
-    return (
-      <div style={{ ...styles.modalOverlay, zIndex: 90 }}>
-        <div style={styles.modalCard}>
-          <p style={{ color: "#9AA39C" }}>Chargement de l'image…</p>
-          <button style={styles.modalClose} onClick={onCancel}>Annuler</button>
-        </div>
-      </div>
-    );
-  }
-
-  const baseScale = Math.max(FRAME_W / natural.w, FRAME_H / natural.h);
-  const scale = baseScale * zoom;
-  const dispW = natural.w * scale;
-  const dispH = natural.h * scale;
-  const maxOffX = Math.max(0, (dispW - FRAME_W) / 2);
-  const maxOffY = Math.max(0, (dispH - FRAME_H) / 2);
-  const clampedX = Math.max(-maxOffX, Math.min(maxOffX, offset.x));
-  const clampedY = Math.max(-maxOffY, Math.min(maxOffY, offset.y));
-
-  const onPointerDown = (e) => {
-    dragState.current = { startX: e.clientX, startY: e.clientY, offX: clampedX, offY: clampedY };
-    e.target.setPointerCapture?.(e.pointerId);
-  };
-  const onPointerMove = (e) => {
-    if (!dragState.current) return;
-    const dx = e.clientX - dragState.current.startX;
-    const dy = e.clientY - dragState.current.startY;
-    setOffset({ x: dragState.current.offX + dx, y: dragState.current.offY + dy });
-  };
-  const onPointerUp = () => { dragState.current = null; };
-
-  const confirmCrop = () => {
-    const outW = 1000;
-    const outH = Math.round(outW / aspect);
-    const canvas = document.createElement("canvas");
-    canvas.width = outW;
-    canvas.height = outH;
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    img.onload = () => {
-      const topLeftX = (FRAME_W - dispW) / 2 + clampedX;
-      const topLeftY = (FRAME_H - dispH) / 2 + clampedY;
-      const sx = Math.max(0, (0 - topLeftX) / scale);
-      const sy = Math.max(0, (0 - topLeftY) / scale);
-      const sw = Math.min(natural.w - sx, FRAME_W / scale);
-      const sh = Math.min(natural.h - sy, FRAME_H / scale);
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-      canvas.toBlob((blob) => onConfirm(blob), "image/jpeg", 0.9);
-    };
-    img.src = imgUrl;
-  };
 
   return (
-    <div style={{ ...styles.modalOverlay, zIndex: 90 }}>
-      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-        <h3 style={styles.modalTitle}>Recadrer la photo</h3>
-        <div
-          ref={frameRef}
-          style={{ width: FRAME_W, height: FRAME_H, margin: "0 auto", overflow: "hidden", position: "relative", borderRadius: 10, background: "#000", touchAction: "none" }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
-        >
-          <img
-            src={imgUrl}
-            alt=""
-            draggable={false}
-            style={{
-              position: "absolute",
-              width: dispW,
-              height: dispH,
-              left: (FRAME_W - dispW) / 2 + clampedX,
-              top: (FRAME_H - dispH) / 2 + clampedY,
-              userSelect: "none",
-              pointerEvents: "none",
-            }}
+    <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center px-6">
+      <GustaveLogo />
+      <p className="text-stone-500 text-sm mb-1">Code à 4 chiffres</p>
+      <p className="font-semibold text-stone-800 mb-6">{label}</p>
+      <div className="flex gap-3 mb-6">
+        {[0,1,2,3].map((i) => (
+          <div key={i} className={`w-4 h-4 rounded-full border-2 transition-colors ${i < pin.length ? "bg-amber-700 border-amber-700" : "border-stone-300"} ${error ? "border-red-400" : ""}`} />
+        ))}
+      </div>
+      {error && <p className="text-red-500 text-xs mb-4">Code incorrect, réessaie</p>}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        {["1","2","3","4","5","6","7","8","9"].map((d) => (
+          <button key={d} onClick={() => press(d)} className="w-16 h-16 rounded-full bg-white border border-stone-200 text-xl font-medium text-stone-700 hover:border-amber-400 active:bg-amber-50 transition-colors">{d}</button>
+        ))}
+        <div />
+        <button onClick={() => press("0")} className="w-16 h-16 rounded-full bg-white border border-stone-200 text-xl font-medium text-stone-700 hover:border-amber-400 active:bg-amber-50 transition-colors">0</button>
+        <button onClick={() => setPin((p) => p.slice(0,-1))} className="w-16 h-16 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-600">⌫</button>
+      </div>
+      <button onClick={onBack} className="text-sm text-stone-400 hover:text-stone-600">← Retour</button>
+    </div>
+  );
+}
+
+function UserSelect({ users, onSelect }) {
+  const roleOrder = { manager: 0, chef: 1, employe: 2 };
+  const sorted = [...users].sort((a, b) => {
+    const aOrder = a.role === "manager" && a.name !== "Vladimir" ? 0 : a.role === "chef" ? 1 : 2;
+    const bOrder = b.role === "manager" && b.name !== "Vladimir" ? 0 : b.role === "chef" ? 1 : 2;
+    return aOrder - bOrder;
+  });
+
+  function roleLabel(role) {
+    if (role === "manager") return "Manager";
+    if (role === "chef") return "Chef d'équipe";
+    return "Employé";
+  }
+  function roleColor(role, name) {
+    if (name === "Vladimir") return "bg-white border border-stone-200 text-stone-700";
+    if (role === "manager") return "bg-stone-800 text-white";
+    if (role === "chef") return "bg-amber-700 text-amber-50";
+    return "bg-white border border-stone-200 text-stone-700";
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center px-6">
+      <div className="mb-8 text-center">
+        <GustaveLogo />
+        <h1 className="text-2xl font-semibold text-stone-800">Chez Gustave Stock</h1>
+        <p className="text-stone-500 text-sm mt-1">Qui es-tu aujourd'hui ?</p>
+      </div>
+      <div className="w-full max-w-sm grid grid-cols-2 gap-3">
+        {sorted.filter(u => u && u.id && u.name).map((user) => (
+          <button key={user.id} onClick={() => onSelect({...user, role: user.role || "employe"})} className={`rounded-xl py-4 px-3 text-center font-medium shadow-sm hover:opacity-90 transition-opacity ${roleColor(user.role, user.name)}`}>
+            <div>{user.name}</div>
+            {user.role === "chef" && <div className="text-xs mt-0.5 text-amber-200">{roleLabel(user.role)}</div>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Header({ role, currentEmployee, onBack, onToggleCatalogue, onToggleUsers, view, isChef, isManager }) {
+  function viewLabel() {
+    if (view === "catalogue") return "Gérer le catalogue";
+    if (view === "users") return "Gérer les utilisateurs";
+    if (role === "employe") return currentEmployee;
+    return "Gestion des commandes";
+  }
+  function roleLabel() {
+    if (role === "manager" && currentEmployee !== "Vladimir") return "Manager";
+    if (role === "chef") return "Chef d'équipe";
+    return "Employé";
+  }
+
+  return (
+    <div className="bg-white border-b border-stone-200 px-5 py-4 flex items-center justify-between sticky top-0 z-10">
+      <div className="flex items-center gap-2">
+        {(view === "catalogue" || view === "users") && (
+          <button onClick={view === "catalogue" ? onToggleCatalogue : onToggleUsers} className="text-stone-400 hover:text-stone-600">
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        <div>
+          <div className="text-xs text-stone-400 uppercase tracking-wide">{roleLabel()}</div>
+          <div className="font-medium text-stone-800">{viewLabel()}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {isChef && view !== "catalogue" && view !== "users" && (
+          <button onClick={onToggleCatalogue} className="text-stone-400 hover:text-amber-700">
+            <Settings size={18} />
+          </button>
+        )}
+        {isChef && view !== "users" && view !== "catalogue" && (
+          <button onClick={onToggleUsers} className="text-stone-400 hover:text-stone-700">
+            <User size={18} />
+          </button>
+        )}
+        <button onClick={onBack} className="text-xs text-stone-400 hover:text-stone-600 underline">Changer</button>
+      </div>
+    </div>
+  );
+}
+
+// Group catalogue into { category: { subcategory: [items] } }
+// Returns CSS class for article name based on groupe: black bold for Alimentaire, light brown for Non Alimentaire
+function articleNameClass(item) {
+  const groupe = item?.groupe || "Alimentaire";
+  return groupe === "Non Alimentaire" ? "font-bold text-amber-600" : "font-bold text-stone-900";
+}
+
+function groupCatalogue(catalogue) {
+  const tree = {};
+  for (const item of (catalogue || [])) {
+    if (!item) continue;
+    if (item._placeholder) {
+      // Ensure category/subcategory exist in tree but don't add the placeholder item
+      const cat = item.category || "Sans catégorie";
+      const sub = item.subcategory || "Général";
+      if (!tree[cat]) tree[cat] = {};
+      if (!tree[cat][sub]) tree[cat][sub] = [];
+      continue;
+    }
+    const cat = item.category || "Sans catégorie";
+    const sub = item.subcategory || "Général";
+    if (!tree[cat]) tree[cat] = {};
+    if (!tree[cat][sub]) tree[cat][sub] = [];
+    tree[cat][sub].push(item);
+  }
+  return tree;
+}
+
+// Returns the groupe (Alimentaire / Non Alimentaire) a category belongs to, based on existing items
+function categoryGroupe(catalogue, category) {
+  const item = catalogue.find((c) => c.category === category && c.groupe);
+  return item ? item.groupe : "Alimentaire";
+}
+
+// List of distinct categories belonging to a given groupe
+function categoriesForGroupe(catalogue, groupe) {
+  const cats = new Set();
+  for (const item of catalogue) {
+    if ((item.groupe || "Alimentaire") === groupe) cats.add(item.category || "Sans catégorie");
+  }
+  return [...cats].sort();
+}
+
+function EmployeeView({ catalogue, onAddRequest, allRequests, history, employees, onToggleReceived, onUpdateComment, onUpdateHistoryComment, onRemoveRequest, onUpdateQty, currentEmployee, currentUser, pins, onChangePin, myRequests, cashRequests, onAddCashRequest, onToggleCashDelivered, onRemoveCashRequest }) {
+  const [selected, setSelected] = useState(null);
+  const [qty, setQty] = useState("1");
+  const [openCat, setOpenCat] = useState(null);
+  const [openSub, setOpenSub] = useState(null);
+  const [sent, setSent] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState(null); // { matches: [] }
+  const [tab, setTab] = useState("nouvelle");
+  const [showCashForm, setShowCashForm] = useState(false);
+  const [selectedGroupe, setSelectedGroupe] = useState(null);
+  const [showAutre, setShowAutre] = useState(false); // "Alimentaire" | "Non Alimentaire"
+
+  const filteredCatalogue = selectedGroupe ? catalogue.filter((c) => (c.groupe || "Alimentaire") === selectedGroupe) : [];
+  const tree = groupCatalogue(filteredCatalogue);
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+  // Count articles validated but not yet received
+  const pendingDeliveryCount = history.reduce((sum, order) =>
+    sum + order.articles.filter((a) => !a.recu).length, 0
+  );
+
+  function findRecentMatches(articleId) {
+    const now = Date.now();
+    const matches = [];
+
+    // Pending requests from other employees
+    for (const r of allRequests) {
+      if (r.articleId === articleId && r.par !== currentEmployee) {
+        matches.push({ par: r.par, date: r.date, quantite: r.quantite, statut: "en attente" });
+      }
+    }
+
+    // Validated orders within the last 3 days
+    for (const order of history) {
+      for (const a of order.articles) {
+        if (a.articleId === articleId && now - new Date(a.date).getTime() <= THREE_DAYS_MS) {
+          matches.push({ par: a.par, date: a.date, quantite: a.quantite, statut: "commandé" });
+        }
+      }
+    }
+
+    // Most recent first
+    matches.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return matches;
+  }
+
+  function attemptSubmit() {
+    if (!selected || !qty || Number(qty) <= 0) return;
+    const matches = findRecentMatches(selected.id);
+    if (matches.length > 0) {
+      setDuplicateModal({ matches });
+    } else {
+      doSubmit();
+    }
+  }
+
+  function doSubmit() {
+    if (!selected) return;
+    onAddRequest(selected.id, Number(qty) || 1);
+    setSelected(null);
+    setQty("1");
+    setDuplicateModal(null);
+    setSent(true);
+    setTimeout(() => setSent(false), 3000);
+  }
+
+
+  return (
+    <div className="max-w-md mx-auto">
+      <div className="grid grid-cols-3 gap-2 p-3 bg-stone-100 sticky top-[65px] z-10">
+        <button onClick={() => setTab("nouvelle")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${tab === "nouvelle" ? "bg-amber-700 text-white shadow-md" : "bg-white text-amber-700 border border-amber-200"}`}>
+          🛒<br/>Nouvelle<br/>commande
+        </button>
+        <button onClick={() => setTab("panier")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${tab === "panier" ? "bg-teal-600 text-white shadow-md" : "bg-white text-teal-600 border border-teal-200"}`}>
+          🧺<br/>Panier<br/>{allRequests.length > 0 ? `(${allRequests.length})` : "commun"}
+        </button>
+        <button onClick={() => setTab("historique")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all relative ${tab === "historique" ? "bg-orange-500 text-white shadow-md" : "bg-white text-orange-500 border border-orange-200"}`}>
+          ⏳<br/>En attente<br/>livraison
+          {pendingDeliveryCount > 0 && (
+            <span className="absolute top-1 right-1 inline-flex items-center justify-center bg-red-600 text-white text-[9px] font-bold rounded-full w-4 h-4 border-2 border-white">
+              {pendingDeliveryCount}
+            </span>
+          )}
+        </button>
+        <button onClick={() => setTab("livre")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${tab === "livre" ? "bg-emerald-600 text-white shadow-md" : "bg-white text-emerald-600 border border-emerald-200"}`}>
+          ✅<br/>Historique
+        </button>
+        <button onClick={() => setTab("monnaie")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${tab === "monnaie" ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-200"}`}>
+          💰<br/>Monnaie
+        </button>
+        <button onClick={() => setTab("profil")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${tab === "profil" ? "bg-stone-700 text-white shadow-md" : "bg-white text-stone-600 border border-stone-200"}`}>
+          👤<br/>Mon<br/>profil
+        </button>
+      </div>
+
+      {tab === "profil" ? (
+        <div className="p-5 max-w-md mx-auto">
+          <ProfilView currentUser={currentUser} pins={pins} onChangePin={onChangePin} />
+        </div>
+      ) : tab === "monnaie" ? (
+        <div className="p-5">
+          <CashList
+            cashRequests={cashRequests}
+            employees={employees}
+            currentIdentity={currentEmployee}
+            onToggleDelivered={onToggleCashDelivered}
+            onRemove={onRemoveCashRequest}
           />
         </div>
-        <label style={styles.label}>Zoom</label>
-        <input type="range" min="1" max="3" step="0.05" value={zoom}
-          onChange={(e) => setZoom(parseFloat(e.target.value))} style={{ width: "100%" }} />
-        <p style={{ fontSize: 12, color: "#9AA39C", marginTop: 4 }}>Fais glisser l'image pour la repositionner.</p>
-        <button style={styles.primaryBtn} onClick={confirmCrop}>Valider le cadrage</button>
-        <button style={styles.modalClose} onClick={onCancel}>Annuler</button>
+      ) : tab === "panier" ? (
+        <div className="p-5">
+          <PanierCommun
+            allRequests={allRequests}
+            catalogue={catalogue}
+            onUpdateComment={onUpdateComment}
+            onRemoveRequest={onRemoveRequest}
+            onUpdateQty={onUpdateQty}
+          />
+        </div>
+      ) : tab === "historique" ? (
+        <div className="p-5">
+          {history.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 text-sm">Aucune commande passée encore</div>
+          ) : (
+            <HistoryByDate
+              history={history}
+              catalogue={catalogue}
+              employees={employees}
+              onToggleReceived={onToggleReceived}
+              onUpdateComment={onUpdateHistoryComment}
+              currentIdentity={currentEmployee}
+              mode="attente"
+            />
+          )}
+        </div>
+      ) : tab === "livre" ? (
+        <div className="p-5">
+          {history.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 text-sm">Aucune commande passée encore</div>
+          ) : (
+            <HistoryByDate
+              history={history}
+              catalogue={catalogue}
+              employees={employees}
+              onToggleReceived={onToggleReceived}
+              onUpdateComment={onUpdateHistoryComment}
+              currentIdentity={currentEmployee}
+              mode="livre"
+            />
+          )}
+        </div>
+      ) : (
+        <div className="p-5">
+      {sent && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white rounded-2xl px-5 py-4 shadow-xl flex items-center gap-3 max-w-[90vw]">
+          <span className="text-2xl">😊</span>
+          <span className="text-sm font-medium">Demande bien enregistrée !</span>
+        </div>
+      )}
+
+      {duplicateModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-6">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <div className="flex flex-col items-center text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+                <AlertTriangle className="text-amber-600" size={22} />
+              </div>
+              <h3 className="font-semibold text-stone-800 mb-1">Déjà demandé récemment</h3>
+              <p className="text-sm text-stone-500">
+                "<span className="font-medium text-stone-700">{selected?.name}</span>" a déjà été signalé ces 3
+                derniers jours :
+              </p>
+            </div>
+
+            <div className="bg-stone-50 rounded-xl p-3 mb-5 space-y-2 max-h-40 overflow-y-auto">
+              {duplicateModal.matches.map((m, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <div>
+                    <span className="font-medium text-stone-700">{m.par}</span>
+                    <span className="text-stone-400"> · x{m.quantite}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-stone-400">
+                      {new Date(m.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" })}
+                    </div>
+                    <div className={`text-[10px] ${m.statut === "commandé" ? "text-emerald-600" : "text-amber-600"}`}>
+                      {m.statut}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-sm text-stone-500 text-center mb-4">Veux-tu envoyer ta demande quand même ?</p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDuplicateModal(null)}
+                className="flex-1 border border-stone-200 text-stone-600 rounded-xl py-3 font-medium hover:bg-stone-50 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={doSubmit}
+                className="flex-1 bg-amber-700 text-amber-50 rounded-xl py-3 font-medium hover:bg-amber-800 transition-colors"
+              >
+                Continuer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAutre ? (
+        <AutreArticleView
+          onSubmit={(items) => {
+            items.forEach(item => onAddRequest(null, item.quantite, item.nom));
+            setShowAutre(false);
+            setSent(true);
+            setTimeout(() => setSent(false), 3000);
+          }}
+          onBack={() => setShowAutre(false)}
+        />
+      ) : !selectedGroupe ? (
+        <>
+          <h2 className="text-stone-700 font-medium mb-3 text-sm">Quel type de produit ?</h2>
+          <div className="grid grid-cols-1 gap-3 mb-6">
+            <button
+              onClick={() => setSelectedGroupe("Alimentaire")}
+              className="bg-white border border-stone-200 rounded-xl py-5 text-center font-medium text-stone-700 hover:border-amber-400 hover:text-amber-700 transition-colors shadow-sm"
+            >
+              🧃 Alimentaires
+            </button>
+            <button
+              onClick={() => setSelectedGroupe("Non Alimentaire")}
+              className="bg-white border border-stone-200 rounded-xl py-5 text-center font-medium text-stone-700 hover:border-amber-400 hover:text-amber-700 transition-colors shadow-sm"
+            >
+              🥡 Non Alimentaires
+            </button>
+            <button
+              onClick={() => { setShowAutre(true); setSelectedGroupe(null); }}
+              className="bg-white border-2 border-dashed border-stone-300 rounded-xl py-5 text-center font-medium text-stone-500 hover:border-amber-400 hover:text-amber-700 transition-colors shadow-sm"
+            >
+              ➕ Autre<br/>
+              <span className="text-xs font-normal text-stone-400">Article non répertorié</span>
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-stone-700 font-medium text-sm">
+              {selectedGroupe === "Alimentaire" ? "🧃 Alimentaires" : "🥡 Non Alimentaires"}
+            </h2>
+            <button
+              onClick={() => {
+                setSelectedGroupe(null);
+                setSelected(null);
+                setOpenCat(null);
+                setOpenSub(null);
+              }}
+              className="text-xs text-amber-700 underline"
+            >
+              Changer
+            </button>
+          </div>
+
+      <div className="space-y-2 mb-6">
+        {Object.entries(tree).map(([cat, subs]) => (
+          <div key={cat} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setOpenCat(openCat === cat ? null : cat)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-stone-800"
+            >
+              {cat}
+              <ChevronDown
+                size={16}
+                className={`text-stone-400 transition-transform ${openCat === cat ? "rotate-180" : ""}`}
+              />
+            </button>
+            {openCat === cat && (
+              <div className="px-2 pb-2">
+                {Object.entries(subs).map(([sub, items]) => (
+                  <div key={sub} className="mb-1">
+                    <button
+                      onClick={() => setOpenSub(openSub === sub ? null : sub)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs uppercase tracking-wide text-stone-400"
+                    >
+                      {sub}
+                      <ChevronDown
+                        size={12}
+                        className={`transition-transform ${openSub === sub ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {openSub === sub && (
+                      <div className="flex flex-col gap-2 px-3 pb-2">
+                        {items.map((item) => (
+                          <div key={item.id}>
+                            <button
+                              onClick={() => {
+                                if (selected?.id === item.id) {
+                                  setSelected(null);
+                                } else {
+                                  setSelected(item);
+                                  setQty("1");
+                                }
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${
+                                selected?.id === item.id
+                                  ? "bg-amber-700 text-amber-50 border-amber-700"
+                                  : "bg-stone-50 text-stone-700 border-stone-200 hover:border-amber-300"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span>{item.name}</span>
+                                {selected?.id === item.id && <ChevronDown size={14} className="rotate-180" />}
+                              </div>
+                              <div className={`text-[10px] mt-0.5 ${selected?.id === item.id ? "text-amber-100" : "text-stone-400"}`}>
+                                {item.code ? `${item.code} · ` : ""}{item.minStock ? `Min: ${item.minStock} ${item.minUnit || ''}` : ""}
+                              </div>
+                            </button>
+
+                            {selected?.id === item.id && (
+                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-1 flex items-center gap-3">
+                                <span className="text-xs text-stone-500 shrink-0">Quantité</span>
+                                <div className="flex items-center gap-2 ml-auto">
+                                  <button
+                                    onClick={() => setQty((q) => String(Math.max(1, Number(q) - 1)))}
+                                    className="w-8 h-8 rounded-lg bg-white border border-stone-200 text-stone-600 font-medium flex items-center justify-center hover:border-amber-400"
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={qty}
+                                    onChange={(e) => setQty(e.target.value)}
+                                    className="w-12 text-center border border-stone-200 rounded-lg py-1 text-sm"
+                                  />
+                                  <button
+                                    onClick={() => setQty((q) => String(Number(q) + 1))}
+                                    className="w-8 h-8 rounded-lg bg-white border border-stone-200 text-stone-600 font-medium flex items-center justify-center hover:border-amber-400"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={attemptSubmit}
+                                  className="bg-amber-700 text-amber-50 rounded-lg px-3 py-2 text-sm font-medium hover:bg-amber-800 transition-colors shrink-0"
+                                >
+                                  Envoyer
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+        </>
+      )}
+
+      {myRequests.length > 0 && (
+        <div>
+          <h3 className="text-xs uppercase tracking-wide text-stone-400 mb-2">Mes demandes en attente</h3>
+          <div className="space-y-2">
+            {myRequests.filter(r => r && r.id).map((r) => {
+              let item = null, nom = "Article";
+              try {
+                item = r.articleId ? catalogue.find((c) => c.id === r.articleId) : null;
+                nom = r.isNouveau ? (r.nomLibre || "Article libre") : (item ? item.name : "Article supprimé");
+              } catch(e) { nom = r.nomLibre || "Article"; }
+              return (
+                <div
+                  key={r.id}
+                  className="bg-white border border-stone-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm"
+                >
+                  <span className="text-stone-700">{nom}</span>
+                  <span className="text-stone-400">x{r.quantite}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6">
+        <button
+          onClick={() => setShowCashForm(!showCashForm)}
+          className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl py-4 font-bold text-base tracking-wide transition-colors flex items-center justify-center gap-2"
+        >
+          💰 DEMANDE DE MONNAIE
+        </button>
+
+        {showCashForm && (
+          <CashRequestForm
+            currentEmployee={currentEmployee}
+            onSubmit={(lines, total) => {
+              onAddCashRequest(lines, total, currentEmployee);
+              setShowCashForm(false);
+            }}
+            onCancel={() => setShowCashForm(false)}
+          />
+        )}
+      </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function AutreArticleView({ onSubmit, onBack }) {
+  const [items, setItems] = useState([{ id: uid(), nom: "", quantite: 1 }]);
+
+  function addLine() {
+    setItems(prev => [...prev, { id: uid(), nom: "", quantite: 1 }]);
+  }
+  function updateLine(id, field, value) {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
+  }
+  function removeLine(id) {
+    if (items.length === 1) return;
+    setItems(prev => prev.filter(i => i.id !== id));
+  }
+  function handleSubmit() {
+    const valid = items.filter(i => i.nom.trim());
+    if (valid.length === 0) return;
+    onSubmit(valid);
+  }
+
+  return (
+    <div className="bg-white border-2 border-dashed border-stone-300 rounded-xl p-4 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-stone-700">➕ Article non répertorié</h3>
+      </div>
+      <div className="space-y-2 mb-3">
+        {items.map((item) => (
+          <div key={item.id} className="flex items-center gap-2">
+            <input
+              value={item.nom}
+              onChange={(e) => updateLine(item.id, "nom", e.target.value)}
+              placeholder="Nom de l'article..."
+              className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <div className="flex items-center gap-1">
+              <button onClick={() => updateLine(item.id, "quantite", Math.max(1, item.quantite - 1))} className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 font-bold flex items-center justify-center">−</button>
+              <span className="w-6 text-center text-sm font-medium">{item.quantite}</span>
+              <button onClick={() => updateLine(item.id, "quantite", item.quantite + 1)} className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 font-bold flex items-center justify-center">+</button>
+            </div>
+            {items.length > 1 && (
+              <button onClick={() => removeLine(item.id)} className="text-stone-300 hover:text-red-500"><Trash2 size={14} /></button>
+            )}
+          </div>
+        ))}
+      </div>
+      <button onClick={addLine} className="text-xs text-amber-700 underline mb-3 flex items-center gap-1"><Plus size={12} /> Ajouter un autre article</button>
+      <div className="flex gap-2">
+        <button onClick={onBack} className="flex-none bg-stone-100 text-stone-600 rounded-xl py-3 px-5 font-medium hover:bg-stone-200 transition-colors">← Retour</button>
+        <button onClick={handleSubmit} className="flex-1 bg-amber-700 text-amber-50 rounded-xl py-3 font-medium hover:bg-amber-800 transition-colors">Envoyer</button>
       </div>
     </div>
   );
 }
 
-function BulkUploadModal({ countryName, onClose, onDone }) {
-  const [files, setFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [failedItems, setFailedItems] = useState([]);
-  const [succeeded, setSucceeded] = useState(null);
+function PanierCommun({ allRequests, catalogue, onUpdateComment, onRemoveRequest, onUpdateQty }) {
+  const [commentOpenId, setCommentOpenId] = useState(null);
+  const now = new Date();
+  const deadline = new Date(now);
+  deadline.setHours(13, 30, 0, 0);
+  const minutesLeft = Math.round((deadline - now) / 60000);
+  const isPast = minutesLeft < 0;
 
-  const onPickFiles = (e) => {
-    const list = Array.from(e.target.files || []);
-    setFiles(list);
-    setFailedItems([]);
-    setSucceeded(null);
-  };
-
-  const handleUpload = async () => {
-    if (files.length === 0) return;
-    setUploading(true);
-    setFailedItems([]);
-    setSucceeded(null);
-    setProgress({ done: 0, total: files.length });
-    const uploaded = [];
-    const failed = [];
-    for (const file of files) {
-      try {
-        const toUpload = await compressImage(file);
-        const url = await uploadToStorage(toUpload, file.name);
-        uploaded.push({ src: url, caption: "" });
-      } catch (e) {
-        console.error("Échec upload", file.name, e);
-        failed.push({ name: file.name, reason: e?.message || "erreur inconnue" });
-      }
-      setProgress((p) => ({ ...p, done: p.done + 1 }));
-    }
-    setFailedItems(failed);
-    setUploading(false);
-    setSucceeded(uploaded.length);
-    if (uploaded.length > 0) {
-      const newPages = autoLayoutPhotos(uploaded);
-      onDone(newPages);
-    }
-  };
+  // Group by category
+  const byCategory = {};
+  const safeRequests = (allRequests || []).filter(r => r && r.id && r.par && r.quantite);
+  for (const r of safeRequests) {
+    try {
+      const item = r.articleId ? catalogue.find((c) => c.id === r.articleId) : null;
+      const cat = item?.category || (r.isNouveau ? "Autres articles" : "Sans catégorie");
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push({ ...r, item });
+    } catch(e) { console.error("PanierCommun item error:", e); }
+  }
+  // Distinct people who have contributed
+  const contributors = [...new Set(allRequests.map((r) => r.par))];
 
   return (
-    <Modal onClose={onClose}>
-      <h3 style={styles.modalTitle}>Plusieurs photos — {countryName}</h3>
-      <label style={styles.label}>Choisis toutes tes photos d'un coup</label>
-      <input type="file" accept="image/*" multiple style={styles.input} onChange={onPickFiles} disabled={uploading} />
-      {files.length > 0 && !uploading && succeeded === null && (
-        <p style={{ fontSize: 12, color: "#9AA39C", marginTop: 6 }}>{files.length} photo{files.length > 1 ? "s" : ""} sélectionnée{files.length > 1 ? "s" : ""}</p>
-      )}
-      <p style={{ fontSize: 11, color: "#9AA39C", marginTop: 8 }}>
-        Elles seront réparties automatiquement sur plusieurs pages — certaines en photo seule, d'autres en mosaïque — dans un agencement un peu aléatoire pour un résultat varié. Tu pourras tout modifier ensuite (déplacer, changer le format, supprimer).
-      </p>
-      {uploading && (
-        <p style={{ fontSize: 12, color: "#9AA39C", marginTop: 8 }}>Envoi {progress.done}/{progress.total}…</p>
-      )}
-      {!uploading && succeeded !== null && (
-        <p style={{ fontSize: 13, color: failedItems.length === 0 ? "#7EB876" : "#C9A876", marginTop: 8, fontWeight: 600 }}>
-          ✓ {succeeded} photo{succeeded > 1 ? "s" : ""} ajoutée{succeeded > 1 ? "s" : ""} avec succès{failedItems.length > 0 ? `, ${failedItems.length} échec${failedItems.length > 1 ? "s" : ""}` : ""}.
-        </p>
-      )}
-      {!uploading && failedItems.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <p style={{ fontSize: 12, color: "#E8785A", margin: 0 }}>
-            Détail des échecs :
-          </p>
-          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-            {failedItems.map((f, i) => (
-              <li key={i} style={{ fontSize: 11, color: "#E8785A99" }}>{f.name} — {f.reason}</li>
-            ))}
-          </ul>
+    <div>
+      <div
+        className={`rounded-xl p-4 mb-5 text-sm ${
+          isPast ? "bg-stone-100 text-stone-500" : "bg-amber-50 border border-amber-200 text-amber-700"
+        }`}
+      >
+        {isPast ? (
+          <>L'heure limite de 13h30 est passée pour aujourd'hui.</>
+        ) : (
+          <>
+            ⏰ Envoyez vos demandes avant <span className="font-semibold">13h30</span> — encore{" "}
+            <span className="font-semibold">{minutesLeft} min</span>. Idéalement, tout le monde envoie en même
+            temps pour ne faire qu'une seule commande.
+          </>
+        )}
+      </div>
+
+      {contributors.length > 0 && (
+        <div className="text-xs text-stone-400 mb-4">
+          Ont déjà ajouté quelque chose : <span className="text-stone-600 font-medium">{contributors.join(", ")}</span>
         </div>
       )}
-      {succeeded === null ? (
-        <button style={styles.primaryBtn} disabled={files.length === 0 || uploading} onClick={handleUpload}>
-          {uploading ? "Envoi en cours…" : `Envoyer ${files.length || ""} photo${files.length > 1 ? "s" : ""}`}
-        </button>
+
+      {allRequests.length === 0 ? (
+        <div className="text-center py-16 text-stone-400 text-sm">
+          <ClipboardList className="mx-auto mb-2" size={28} />
+          Personne n'a encore rien ajouté
+        </div>
       ) : (
-        <button style={styles.primaryBtn} onClick={onClose}>Terminé, fermer</button>
+        <div className="space-y-4">
+          {Object.entries(byCategory).map(([cat, items]) => (
+            <div key={cat}>
+              <div className="text-xs font-semibold text-stone-500 mb-1">{cat}</div>
+              <div className="bg-white border border-stone-200 rounded-xl divide-y divide-stone-100">
+                {items.map((r) => (
+                  <div key={r.id} className="px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Check size={14} className="text-emerald-500 shrink-0" />
+                      <span className="flex-1 flex items-center gap-1 flex-wrap">
+                        {r.isNouveau ? (
+                          <>
+                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>
+                            <span className="font-bold text-stone-900">{r.nomLibre || "Article libre"}</span>
+                          </>
+                        ) : (
+                          <><span className="text-stone-400 font-normal">{r.item?.code ? `${r.item.code} · ` : ""}</span><span className={articleNameClass(r.item)}>{r.item ? r.item.name : "Article supprimé"}</span></>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-1">
+                      <button onClick={() => onUpdateQty && onUpdateQty(r.id, Math.max(1, r.quantite - 1))} className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 font-bold flex items-center justify-center text-sm">−</button>
+                      <span className="text-stone-700 font-medium text-sm w-6 text-center">{r.quantite}</span>
+                      <button onClick={() => onUpdateQty && onUpdateQty(r.id, r.quantite + 1)} className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 font-bold flex items-center justify-center text-sm">+</button>
+                    </div>
+                    </div>
+                    <div className="pl-6 mt-1">
+                      {r.commentaire ? (
+                        <button
+                          onClick={() => setCommentOpenId(commentOpenId === r.id ? null : r.id)}
+                          className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 inline-flex items-center gap-1"
+                        >
+                          💬 {r.commentaire}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setCommentOpenId(commentOpenId === r.id ? null : r.id)}
+                          className="text-xs text-stone-400 underline"
+                        >
+                          + Ajouter un commentaire
+                        </button>
+                      )}
+                      {commentOpenId === r.id && (
+                        <CommentEditor
+                          value={r.commentaire || ""}
+                          onSave={(text) => {
+                            onUpdateComment && onUpdateComment(r.id, text);
+                            setCommentOpenId(null);
+                          }}
+                          onCancel={() => setCommentOpenId(null)}
+                        />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-    </Modal>
+    </div>
   );
 }
 
-function PhotoFormModal({ title, initial, pages, onClose, onSubmit }) {
-  const [src, setSrc] = useState(initial?.src || "");
-  const [caption, setCaption] = useState(initial?.caption || "");
-  const [size, setSize] = useState(initial?.size || "normal");
-  const [mediaType, setMediaType] = useState(initial?.type || "photo");
-  const [pageId, setPageId] = useState("__new__");
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const [pendingFile, setPendingFile] = useState(null);
-  const [preparing, setPreparing] = useState(false);
+function CashRequestForm({ currentEmployee, onSubmit, onCancel }) {
+  const [qtys, setQtys] = useState({}); // { denomId: quantity }
 
-  const onPickFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploadError("");
+  function setQty(id, value) {
+    const n = Math.max(0, Number(value) || 0);
+    setQtys((prev) => ({ ...prev, [id]: n }));
+  }
 
-    // Vidéo : pas de recadrage, envoi direct
-    if (file.type?.startsWith("video/")) {
-      if (file.size > 50 * 1024 * 1024) {
-        setUploadError("Cette vidéo est trop lourde (plus de 50 Mo). Utilise une vidéo plus courte.");
-        return;
-      }
-      setUploading(true);
-      try {
-        const url = await uploadToStorage(file, file.name);
-        setSrc(url);
-        setMediaType("video");
-      } catch (err) {
-        console.error(err);
-        setUploadError("Échec de l'envoi de la vidéo. Réessaie.");
-      } finally {
-        setUploading(false);
-      }
-      return;
-    }
+  const lines = DENOMINATIONS.map((d) => ({
+    ...d,
+    qty: qtys[d.id] || 0,
+    subtotal: (qtys[d.id] || 0) * d.value,
+  }));
+  const total = lines.reduce((sum, l) => sum + l.subtotal, 0);
+  const rouleaux = lines.filter((l) => l.type === "rouleau");
+  const billets = lines.filter((l) => l.type === "billet");
 
-    setPreparing(true);
-    try {
-      const prepared = await compressImage(file, 2000, 0.85);
-      setPendingFile(prepared);
-      setMediaType("photo");
-    } catch (err) {
-      console.error(err);
-      setUploadError("Impossible de préparer cette photo (format non supporté ?). Essaie une autre photo.");
-    } finally {
-      setPreparing(false);
-    }
-  };
+  function submit() {
+    const selected = lines.filter((l) => l.qty > 0).map(({ id, type, value, label, qty, subtotal }) => ({ id, type, value, label, qty, subtotal }));
+    if (selected.length === 0) return;
+    onSubmit(selected, total);
+  }
 
-  const onCropConfirm = async (blob) => {
-    setPendingFile(null);
-    setUploading(true);
-    setUploadError("");
-    try {
-      const url = await uploadToStorage(blob, "photo.jpg");
-      setSrc(url);
-    } catch (err) {
-      console.error("Erreur d'upload", err);
-      setUploadError("Échec de l'envoi. Vérifie que le bucket 'Photos' existe, est public, et autorise l'upload.");
-    } finally {
-      setUploading(false);
-    }
-  };
+  function renderRow(l) {
+    return (
+      <div key={l.id} className="flex items-center justify-between py-1.5 border-b border-stone-100 last:border-0">
+        <span className="text-sm text-stone-700">{l.label}</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            value={qtys[l.id] || ""}
+            onChange={(e) => setQty(l.id, e.target.value)}
+            placeholder="0"
+            className="w-16 border border-stone-200 rounded-lg px-2 py-1 text-center text-sm"
+          />
+          <span className="text-xs text-stone-400 w-16 text-right">
+            {l.subtotal > 0 ? `${l.subtotal.toFixed(2)} CHF` : ""}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
-    {pendingFile && (
-      <ImageCropper file={pendingFile} aspect={4 / 5} onCancel={() => setPendingFile(null)} onConfirm={onCropConfirm} />
-    )}
-    <Modal onClose={onClose}>
-      <h3 style={styles.modalTitle}>{title}</h3>
+    <div className="bg-white border-2 border-red-200 rounded-xl p-4 mb-6">
+      <h3 className="text-sm font-semibold text-red-700 mb-3">💰 Demande de monnaie — {currentEmployee}</h3>
 
-      <label style={styles.label}>Depuis ta galerie (photo ou vidéo)</label>
-      <input type="file" accept="image/*,video/*" style={styles.input} onChange={onPickFile} disabled={uploading || preparing} />
-      {preparing && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Préparation de la photo…</p>}
-      {uploading && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Envoi en cours…</p>}
-      {uploadError && <p style={{ fontSize: 12, color: "#E8785A", margin: "6px 0 0" }}>{uploadError}</p>}
-      {src && !uploading && (
-        mediaType === "video"
-          ? <video src={src} style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginTop: 10 }} autoPlay loop muted playsInline />
-          : <img src={src} alt="Aperçu" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginTop: 10 }} />
+      <div className="mb-3">
+        <div className="text-xs font-semibold text-stone-500 mb-1 uppercase tracking-wide">Rouleaux</div>
+        {rouleaux.map(renderRow)}
+      </div>
+
+      <div className="mb-4">
+        <div className="text-xs font-semibold text-stone-500 mb-1 uppercase tracking-wide">Billets</div>
+        {billets.map(renderRow)}
+      </div>
+
+      <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+        <span className="text-sm font-semibold text-red-700">Total global</span>
+        <span className="text-lg font-bold text-red-700">{total.toFixed(2)} CHF</span>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={onCancel}
+          className="flex-1 border border-stone-200 text-stone-600 rounded-xl py-3 font-medium hover:bg-stone-50 transition-colors"
+        >
+          Annuler
+        </button>
+        <button
+          onClick={submit}
+          disabled={total === 0}
+          className="flex-1 bg-red-600 text-white rounded-xl py-3 font-medium hover:bg-red-700 disabled:opacity-40 transition-colors"
+        >
+          Envoyer la demande
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CashList({ cashRequests, employees, currentIdentity, onToggleDelivered, onRemove }) {
+  const sorted = [...cashRequests].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const pending = sorted.filter((c) => !c.livre);
+  const delivered = sorted.filter((c) => c.livre);
+
+  function renderCard(c) {
+    return (
+      <div key={c.id} className="bg-white border border-stone-200 rounded-xl p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <div className="text-sm font-medium text-stone-800">{c.par}</div>
+            <div className="text-xs text-stone-400">
+              {new Date(c.date).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </div>
+          </div>
+          <span className="text-base font-bold text-red-700">{c.total.toFixed(2)} CHF</span>
+        </div>
+
+        <div className="space-y-0.5 mb-3">
+          {c.lines.map((l) => (
+            <div key={l.id} className="flex justify-between text-xs text-stone-500">
+              <span>{l.label} × {l.qty}</span>
+              <span>{l.subtotal.toFixed(2)} CHF</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => onToggleDelivered(c.id, currentIdentity || "Inconnu")}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              c.livre
+                ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                : "bg-white border-stone-200 text-stone-500 hover:border-amber-400"
+            }`}
+          >
+            <Check size={13} />
+            {c.livre ? "Livré" : "Marquer comme livré"}
+          </button>
+          {!c.livre && onRemove && (
+            <button onClick={() => onRemove(c.id)} className="text-stone-300 hover:text-red-500">
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
+
+        {c.livrePar && (
+          <div className="text-[11px] text-stone-400 mt-2">
+            Livré par <span className="font-medium text-emerald-600">{c.livrePar}</span>
+            {c.livreDate && <> le {new Date(c.livreDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</>}
+            {c.corrigePar && (
+              <>
+                {" "}
+                · <span className="font-medium text-orange-600">
+                  {c.livre ? "Re-confirmé" : "Corrigé (non livré)"} par {c.corrigePar}
+                </span>
+                {c.corrigeDate && <> le {new Date(c.corrigeDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</>}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (cashRequests.length === 0) {
+    return (
+      <div className="text-center py-16 text-stone-400 text-sm">
+        <ClipboardList className="mx-auto mb-2" size={28} />
+        Aucune demande de monnaie
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {pending.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">
+            En attente de livraison ({pending.length})
+          </div>
+          <div className="space-y-3">{pending.map(renderCard)}</div>
+        </div>
+      )}
+      {delivered.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+            Livrées ({delivered.length})
+          </div>
+          <div className="space-y-3">{delivered.map(renderCard)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PinChanger({ userId, currentPin, onSave, onCancel }) {
+  const [step, setStep] = useState("old"); // "old" | "new" | "confirm"
+  const [pin, setPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [error, setError] = useState("");
+
+  function press(digit) {
+    if (pin.length >= 4) return;
+    const next = pin + digit;
+    setPin(next);
+    setError("");
+    if (next.length === 4) {
+      setTimeout(() => {
+        if (step === "old") {
+          if (next !== currentPin) { setError("Code actuel incorrect"); setPin(""); return; }
+          setStep("new"); setPin("");
+        } else if (step === "new") {
+          setNewPin(next); setStep("confirm"); setPin("");
+        } else {
+          if (next !== newPin) { setError("Les codes ne correspondent pas"); setPin(""); setStep("new"); setNewPin(""); return; }
+          onSave(next);
+        }
+      }, 150);
+    }
+  }
+
+  const labels = { old: "Code actuel", new: "Nouveau code", confirm: "Confirmer le nouveau code" };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-6">
+      <div className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-xl text-center">
+        <h3 className="font-semibold text-stone-800 mb-1">Changer mon code</h3>
+        <p className="text-sm text-stone-500 mb-4">{labels[step]}</p>
+        <div className="flex gap-3 justify-center mb-4">
+          {[0,1,2,3].map((i) => (
+            <div key={i} className={`w-4 h-4 rounded-full border-2 transition-colors ${i < pin.length ? "bg-amber-700 border-amber-700" : "border-stone-300"}`} />
+          ))}
+        </div>
+        {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {["1","2","3","4","5","6","7","8","9"].map((d) => (
+            <button key={d} onClick={() => press(d)} className="h-12 rounded-xl bg-stone-50 border border-stone-200 text-lg font-medium text-stone-700 hover:border-amber-400">{d}</button>
+          ))}
+          <div />
+          <button onClick={() => press("0")} className="h-12 rounded-xl bg-stone-50 border border-stone-200 text-lg font-medium text-stone-700 hover:border-amber-400">0</button>
+          <button onClick={() => setPin((p) => p.slice(0,-1))} className="h-12 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-600">⌫</button>
+        </div>
+        <button onClick={onCancel} className="text-sm text-stone-400 hover:text-stone-600">Annuler</button>
+      </div>
+    </div>
+  );
+}
+
+function ProfilView({ currentUser, pins, onChangePin }) {
+  const [showPinChanger, setShowPinChanger] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  return (
+    <div>
+      {showPinChanger && (
+        <PinChanger
+          userId={currentUser.id}
+          currentPin={pins[currentUser.id] || "1234"}
+          onSave={async (newPin) => {
+            await onChangePin(currentUser.id, newPin);
+            setShowPinChanger(false);
+            setSuccess(true);
+            setTimeout(() => setSuccess(false), 2000);
+          }}
+          onCancel={() => setShowPinChanger(false)}
+        />
+      )}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 text-center mb-4">
+        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+          <User className="text-amber-700" size={24} />
+        </div>
+        <div className="font-semibold text-stone-800 text-lg">{currentUser.name}</div>
+        <div className="text-xs text-stone-400 mt-0.5">
+          {currentUser.role === "manager" ? "Manager" : currentUser.role === "chef" ? "Chef d'équipe" : "Employé"}
+        </div>
+      </div>
+
+      {success && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white rounded-2xl px-5 py-4 shadow-xl flex items-center gap-3">
+          <span className="text-xl">✅</span>
+          <span className="text-sm font-medium">Code PIN mis à jour !</span>
+        </div>
       )}
 
-      <label style={styles.label}>...ou colle une URL d'image</label>
-      <input style={styles.input} value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://..." />
-      <label style={styles.label}>Description (optionnelle)</label>
-      <input style={styles.input} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Ex : Coucher de soleil à Porto" />
-      {pages && (
-        <>
-          <label style={styles.label}>Page</label>
-          <select style={styles.input} value={pageId} onChange={(e) => setPageId(e.target.value)}>
-            <option value="__new__">Nouvelle page</option>
-            {pages.map((pg, i) => (
-              <option key={pg.id} value={pg.id}>Page {i + 1} ({pg.photos.length} photo{pg.photos.length > 1 ? "s" : ""})</option>
-            ))}
+      <button
+        onClick={() => setShowPinChanger(true)}
+        className="w-full bg-white border border-stone-200 rounded-xl py-4 text-sm font-medium text-stone-700 hover:border-amber-400 hover:text-amber-700 transition-colors flex items-center justify-center gap-2"
+      >
+        🔑 Changer mon code PIN
+      </button>
+    </div>
+  );
+}
+
+function UserManager({ users, pins, currentUser, onAddUser, onRemoveUser, onChangePin }) {
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("employe");
+  const [changingPinFor, setChangingPinFor] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(null);
+
+  const roleLabel = { employe: "Employé", chef: "Chef d'équipe", manager: "Manager" };
+  const roleColor = { employe: "text-stone-600 bg-stone-100", chef: "text-amber-700 bg-amber-50", manager: "text-white bg-stone-800" };
+
+  async function handleAdd() {
+    if (!newName.trim()) return;
+    await onAddUser(newName.trim(), newRole);
+    setNewName("");
+    setNewRole("employe");
+  }
+
+  return (
+    <div className="p-5 max-w-md mx-auto">
+      {changingPinFor && (
+        <PinChanger
+          userId={changingPinFor.id}
+          currentPin={pins[changingPinFor.id] || "1234"}
+          onSave={async (newPin) => { await onChangePin(changingPinFor.id, newPin); setChangingPinFor(null); }}
+          onCancel={() => setChangingPinFor(null)}
+        />
+      )}
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Supprimer cet utilisateur ?"
+          message={`"${confirmRemove.name}" sera retiré définitivement.`}
+          onCancel={() => setConfirmRemove(null)}
+          onConfirm={async () => { await onRemoveUser(confirmRemove.id); setConfirmRemove(null); }}
+        />
+      )}
+
+      <div className="bg-white border border-stone-200 rounded-xl p-4 mb-6">
+        <h3 className="text-sm font-medium text-stone-700 mb-3">Ajouter un utilisateur</h3>
+        <div className="space-y-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Prénom"
+            className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+          />
+          <select
+            value={newRole}
+            onChange={(e) => setNewRole(e.target.value)}
+            className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            <option value="employe">Employé</option>
+            <option value="chef">Chef d'équipe</option>
+            <option value="manager">Manager</option>
           </select>
+          <button
+            onClick={handleAdd}
+            className="w-full bg-stone-800 text-white rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"
+          >
+            <Plus size={14} /> Ajouter (Code PIN: 1234 par défaut)
+          </button>
+        </div>
+      </div>
+
+      <h3 className="text-xs uppercase tracking-wide text-stone-400 mb-2">Utilisateurs</h3>
+      <div className="space-y-2">
+        {users.map((u) => (
+          <div key={u.id} className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="font-medium text-stone-800 text-sm">{u.name}</div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${roleColor[u.role] || "text-stone-500 bg-stone-100"}`}>
+                {roleLabel[u.role] || u.role}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setChangingPinFor(u)}
+                className="text-xs text-amber-700 border border-amber-200 bg-amber-50 rounded-lg px-2 py-1"
+              >
+                🔑 PIN
+              </button>
+              {u.id !== currentUser.id && (
+                <button onClick={() => setConfirmRemove(u)} className="text-stone-300 hover:text-red-500">
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({ title, message, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-6">
+      <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+        <div className="flex flex-col items-center text-center mb-5">
+          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+            <Trash2 className="text-red-600" size={20} />
+          </div>
+          <h3 className="font-semibold text-stone-800 mb-1">{title}</h3>
+          <p className="text-sm text-stone-500">{message}</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 border border-stone-200 text-stone-600 rounded-xl py-3 font-medium hover:bg-stone-50 transition-colors"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 bg-red-600 text-white rounded-xl py-3 font-medium hover:bg-red-700 transition-colors"
+          >
+            Supprimer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommentEditor({ value, onSave, onCancel }) {
+  const presets = ["Rupture stock", "Livraison tardive", "Plus référencé"];
+
+  // Parse existing value to separate base text from an appended date, if any
+  const dateMatch = value.match(/ \(prévue le (\d{4}-\d{2}-\d{2})\)$/);
+  const initialText = dateMatch ? value.slice(0, dateMatch.index) : value;
+  const initialDate = dateMatch ? dateMatch[1] : "";
+
+  const [text, setText] = useState(initialText);
+  const [lateDate, setLateDate] = useState(initialDate);
+
+  const isLate = text === "Livraison tardive";
+
+  function buildFinalText() {
+    const base = text.trim();
+    if (!base) return "";
+    if (isLate && lateDate) {
+      return `${base} (prévue le ${lateDate})`;
+    }
+    return base;
+  }
+
+  return (
+    <div className="mt-2 bg-stone-50 border border-stone-200 rounded-xl p-3">
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {presets.map((p) => (
+          <button
+            key={p}
+            onClick={() => setText(p)}
+            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              text === p
+                ? "bg-amber-700 text-amber-50 border-amber-700"
+                : "bg-white text-stone-600 border-stone-200 hover:border-amber-300"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {isLate && (
+        <div className="mb-2">
+          <label className="text-xs text-stone-500 mb-1 block">Date de livraison prévue</label>
+          <input
+            type="date"
+            value={lateDate}
+            onChange={(e) => setLateDate(e.target.value)}
+            className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+      )}
+
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Commentaire libre…"
+        className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm mb-2"
+      />
+      <div className="flex gap-2">
+        <button
+          onClick={onCancel}
+          className="flex-1 border border-stone-200 text-stone-500 rounded-lg py-1.5 text-xs font-medium hover:bg-stone-100"
+        >
+          Annuler
+        </button>
+        <button
+          onClick={() => onSave(buildFinalText())}
+          className="flex-1 bg-amber-700 text-amber-50 rounded-lg py-1.5 text-xs font-medium hover:bg-amber-800"
+        >
+          Enregistrer
+        </button>
+        {value && (
+          <button
+            onClick={() => onSave("")}
+            className="text-xs text-red-500 px-2"
+            title="Supprimer le commentaire"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChefCommandeView({ catalogue, allRequests, onAddRequest, currentEmployee, myRequests }) {
+  const [selected, setSelected] = useState(null);
+  const [qty, setQty] = useState("1");
+  const [openCat, setOpenCat] = useState(null);
+  const [openSub, setOpenSub] = useState(null);
+  const [sent, setSent] = useState(false);
+  const [selectedGroupe, setSelectedGroupe] = useState(null);
+  const [duplicateModal, setDuplicateModal] = useState(null);
+  const [showAutreChef, setShowAutreChef] = useState(false);
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+  const filteredCatalogue = selectedGroupe ? catalogue.filter((c) => (c.groupe || "Alimentaire") === selectedGroupe) : [];
+  const tree = groupCatalogue(filteredCatalogue);
+
+  function findRecentMatches(articleId) {
+    const now = Date.now();
+    const matches = [];
+    for (const r of allRequests) {
+      if (r.articleId === articleId && r.par !== currentEmployee) {
+        matches.push({ par: r.par, date: r.date, quantite: r.quantite, statut: "en attente" });
+      }
+    }
+    matches.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return matches;
+  }
+
+  function attemptSubmit() {
+    if (!selected || !qty || Number(qty) <= 0) return;
+    const matches = findRecentMatches(selected.id);
+    if (matches.length > 0) {
+      setDuplicateModal({ matches });
+    } else {
+      doSubmit();
+    }
+  }
+
+  function doSubmit() {
+    if (!selected) return;
+    onAddRequest(selected.id, Number(qty) || 1);
+    setSelected(null);
+    setQty("1");
+    setDuplicateModal(null);
+    setSent(true);
+    setTimeout(() => setSent(false), 3000);
+  }
+
+  return (
+    <div className="max-w-md mx-auto p-5">
+      {sent && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white rounded-2xl px-5 py-4 shadow-xl flex items-center gap-3 max-w-[90vw]">
+          <span className="text-2xl">😊</span>
+          <span className="text-sm font-medium">Ajouté à la liste en attente !</span>
+        </div>
+      )}
+
+      {duplicateModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-6">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <div className="flex flex-col items-center text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+                <AlertTriangle className="text-amber-600" size={22} />
+              </div>
+              <h3 className="font-semibold text-stone-800 mb-1">Déjà demandé récemment</h3>
+              <p className="text-sm text-stone-500">"{selected?.name}" a déjà été signalé :</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3 mb-5 space-y-2 max-h-40 overflow-y-auto">
+              {duplicateModal.matches.map((m, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <div><span className="font-medium text-stone-700">{m.par}</span><span className="text-stone-400"> · x{m.quantite}</span></div>
+                  <div className="text-xs text-stone-400">{new Date(m.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" })}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setDuplicateModal(null)} className="flex-1 border border-stone-200 text-stone-600 rounded-xl py-3 font-medium">Annuler</button>
+              <button onClick={doSubmit} className="flex-1 bg-amber-700 text-amber-50 rounded-xl py-3 font-medium">Continuer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAutreChef ? (
+        <AutreArticleView
+          onSubmit={(items) => {
+            items.forEach(item => onAddRequest(null, item.quantite, item.nom));
+            setShowAutreChef(false);
+            setSent(true);
+            setTimeout(() => setSent(false), 3000);
+          }}
+          onBack={() => setShowAutreChef(false)}
+        />
+      ) : !selectedGroupe ? (
+        <>
+          <h2 className="text-stone-700 font-medium mb-3 text-sm">Quel type de produit ?</h2>
+          <div className="grid grid-cols-1 gap-3">
+            <button onClick={() => setSelectedGroupe("Alimentaire")} className="bg-white border border-stone-200 rounded-xl py-5 text-center font-medium text-stone-700 hover:border-amber-400 hover:text-amber-700 transition-colors shadow-sm">🧃 Alimentaires</button>
+            <button onClick={() => setSelectedGroupe("Non Alimentaire")} className="bg-white border border-stone-200 rounded-xl py-5 text-center font-medium text-stone-700 hover:border-amber-400 hover:text-amber-700 transition-colors shadow-sm">🥡 Non Alimentaires</button>
+            <button onClick={() => { setShowAutreChef(true); setSelectedGroupe(null); }} className="bg-white border-2 border-dashed border-stone-300 rounded-xl py-5 text-center font-medium text-stone-500 hover:border-amber-400 hover:text-amber-700 transition-colors shadow-sm">➕ Autre<div className="text-xs font-normal text-stone-400 mt-1">Article non répertorié</div></button>
+          </div>
+        </>
+      ) : showAutreChef ? (
+        <AutreArticleView
+          onSubmit={(items) => {
+            items.forEach(item => onAddRequest(null, item.quantite, item.nom));
+            setShowAutreChef(false);
+            setSent(true);
+            setTimeout(() => setSent(false), 3000);
+          }}
+          onBack={() => setShowAutreChef(false)}
+        />
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-stone-700 font-medium text-sm">{selectedGroupe === "Alimentaire" ? "🧃 Alimentaires" : "🥡 Non Alimentaires"}</h2>
+            <button onClick={() => { setSelectedGroupe(null); setSelected(null); setOpenCat(null); setOpenSub(null); }} className="text-xs text-amber-700 underline">Changer</button>
+          </div>
+          <div className="space-y-2 mb-4">
+            {Object.entries(tree).map(([cat, subs]) => (
+              <div key={cat} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+                <button onClick={() => setOpenCat(openCat === cat ? null : cat)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-stone-800">
+                  {cat}
+                  <ChevronDown size={16} className={`text-stone-400 transition-transform ${openCat === cat ? "rotate-180" : ""}`} />
+                </button>
+                {openCat === cat && (
+                  <div className="px-2 pb-2">
+                    {Object.entries(subs).map(([sub, items]) => (
+                      <div key={sub} className="mb-1">
+                        <button onClick={() => setOpenSub(openSub === sub ? null : sub)} className="w-full flex items-center justify-between px-3 py-2 text-xs uppercase tracking-wide text-stone-400">
+                          {sub}
+                          <ChevronDown size={12} className={`transition-transform ${openSub === sub ? "rotate-180" : ""}`} />
+                        </button>
+                        {openSub === sub && (
+                          <div className="flex flex-col gap-2 px-3 pb-2">
+                            {items.map((item) => (
+                              <div key={item.id}>
+                                <button
+                                  onClick={() => { if (selected?.id === item.id) { setSelected(null); } else { setSelected(item); setQty("1"); } }}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${selected?.id === item.id ? "bg-amber-700 text-amber-50 border-amber-700" : "bg-stone-50 text-stone-700 border-stone-200 hover:border-amber-300"}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span>{item.name}</span>
+                                    {selected?.id === item.id && <ChevronDown size={14} className="rotate-180" />}
+                                  </div>
+                                  <div className={`text-[10px] mt-0.5 ${selected?.id === item.id ? "text-amber-100" : "text-stone-400"}`}>{item.code ? `${item.code} · ` : ""}{item.minStock ? `Min: ${item.minStock} ${item.minUnit || ''}` : ""}</div>
+                                </button>
+                                {selected?.id === item.id && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-1 flex items-center gap-3">
+                                    <span className="text-xs text-stone-500 shrink-0">Quantité</span>
+                                    <div className="flex items-center gap-2 ml-auto">
+                                      <button onClick={() => setQty((q) => String(Math.max(1, Number(q) - 1)))} className="w-8 h-8 rounded-lg bg-white border border-stone-200 text-stone-600 font-medium flex items-center justify-center hover:border-amber-400">−</button>
+                                      <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} className="w-12 text-center border border-stone-200 rounded-lg py-1 text-sm" />
+                                      <button onClick={() => setQty((q) => String(Number(q) + 1))} className="w-8 h-8 rounded-lg bg-white border border-stone-200 text-stone-600 font-medium flex items-center justify-center hover:border-amber-400">+</button>
+                                    </div>
+                                    <button onClick={attemptSubmit} className="bg-amber-700 text-amber-50 rounded-lg px-3 py-2 text-sm font-medium hover:bg-amber-800 shrink-0">Ajouter</button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </>
       )}
-      <label style={styles.label}>Format si la page a plusieurs photos</label>
-      <select style={styles.input} value={size} onChange={(e) => setSize(e.target.value)}>
-        <option value="normal">Normal</option>
-        <option value="wide">Large (2 colonnes)</option>
-        <option value="tall">Haute (2 lignes)</option>
-        <option value="big">Grande (2×2)</option>
-      </select>
-      <button style={styles.primaryBtn} disabled={!src || uploading}
-        onClick={() => onSubmit(pages ? { src, caption, size, type: mediaType, pageId } : { src, caption, size, type: mediaType })}>
-        Enregistrer
-      </button>
-    </Modal>
-    </>
+
+      {myRequests.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-xs uppercase tracking-wide text-stone-400 mb-2">Mes ajouts en attente</h3>
+          <div className="space-y-2">
+            {myRequests.filter(r => r && r.id).map((r) => {
+              let item = null, nom = "Article";
+              try {
+                item = r.articleId ? catalogue.find((c) => c.id === r.articleId) : null;
+                nom = r.isNouveau ? (r.nomLibre || "Article libre") : (item ? item.name : "Article supprimé");
+              } catch(e) { nom = r.nomLibre || "Article"; }
+              return (
+                <div key={r.id} className="bg-white border border-stone-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm">
+                  <span className="text-stone-700">{nom}</span>
+                  <span className="text-stone-400">x{r.quantite}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-function CountryFormModal({ onClose, onSubmit }) {
-  const [name, setName] = useState("");
-  const [resolving, setResolving] = useState(false);
-  const [notFound, setNotFound] = useState(false);
+function ResponsableView({ requests, history, catalogue, employees, onUpdateQty, onUpdateComment, onUpdateHistoryComment, onRemove, onValidate, onToggleReceived, onAddRequest, onClearHistory, view, setView, cashRequests, onToggleCashDelivered, onRemoveCashRequest, currentUser, currentEmployee, pins, onChangePin }) {
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [commentOpenId, setCommentOpenId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
+  const [showPinChanger, setShowPinChanger] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState(false); // { id, label }
 
-  const handleCreate = async () => {
-    setResolving(true);
-    setNotFound(false);
-    const coords = await geocodeCity(name);
-    setResolving(false);
-    if (!coords) {
-      setNotFound(true);
+  function toggleSelect(id) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function selectAll() {
+    setSelectedIds(requests.map((r) => r.id));
+  }
+
+  function clearSelection() {
+    setSelectedIds([]);
+  }
+
+  return (
+    <div className="max-w-md mx-auto">
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Supprimer cette demande ?"
+          message={`"${confirmDelete.label}" sera retiré définitivement de la liste en attente.`}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => {
+            onRemove(confirmDelete.id);
+            setConfirmDelete(null);
+          }}
+        />
+      )}
+      <div className="grid grid-cols-3 gap-2 p-3 bg-stone-100 sticky top-[65px] z-10">
+        <button onClick={() => setView("nouvelle")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${view === "nouvelle" ? "bg-amber-700 text-white shadow-md" : "bg-white text-amber-700 border border-amber-200"}`}>
+          🛒<br/>Nouvelle<br/>commande
+        </button>
+        <button onClick={() => setView("home")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all relative ${view === "home" ? "bg-orange-500 text-white shadow-md" : "bg-white text-orange-500 border border-orange-200"}`}>
+          ⏳<br/>En attente
+          {requests.length > 0 && (
+            <span className="absolute top-1 right-1 inline-flex items-center justify-center bg-red-600 text-white text-[9px] font-bold rounded-full w-4 h-4 border border-white">
+              {requests.length}
+            </span>
+          )}
+        </button>
+        <button onClick={() => setView("history")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all relative ${view === "history" ? "bg-yellow-500 text-white shadow-md" : "bg-white text-yellow-600 border border-yellow-200"}`}>
+          📦<br/>Validée en<br/>attente
+          {history.reduce((sum, o) => sum + o.articles.filter((a) => !a.recu).length, 0) > 0 && (
+            <span className="absolute top-1 right-1 inline-flex items-center justify-center bg-red-600 text-white text-[9px] font-bold rounded-full w-4 h-4 border-2 border-white">
+              {history.reduce((sum, o) => sum + o.articles.filter((a) => !a.recu).length, 0)}
+            </span>
+          )}
+        </button>
+        <button onClick={() => setView("livre")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all relative ${view === "livre" ? "bg-emerald-600 text-white shadow-md" : "bg-white text-emerald-600 border border-emerald-200"}`}>
+          ✅<br/>Historique
+        </button>
+        <button onClick={() => setView("monnaie")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all relative ${view === "monnaie" ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-200"}`}>
+          💰<br/>Monnaie
+          {cashRequests.filter((c) => !c.livre).length > 0 && (
+            <span className="absolute top-1 right-1 inline-flex items-center justify-center bg-red-600 text-white text-[9px] font-bold rounded-full w-4 h-4 border border-white">
+              {cashRequests.filter((c) => !c.livre).length}
+            </span>
+          )}
+        </button>
+        <button onClick={() => setView("profil")} className={`rounded-xl py-3 px-1 text-center text-xs font-semibold transition-all ${view === "profil" ? "bg-stone-700 text-white shadow-md" : "bg-white text-stone-600 border border-stone-200"}`}>
+          👤<br/>Mon<br/>profil
+        </button>
+      </div>
+
+      {showPinChanger && currentUser && (
+        <PinChanger
+          userId={currentUser.id}
+          currentPin={pins[currentUser.id] || "1234"}
+          onSave={async (newPin) => { await onChangePin(currentUser.id, newPin); setShowPinChanger(false); setPinSuccess(true); setTimeout(() => setPinSuccess(false), 2000); }}
+          onCancel={() => setShowPinChanger(false)}
+        />
+      )}
+      {pinSuccess && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white rounded-2xl px-5 py-4 shadow-xl flex items-center gap-3">
+          <span className="text-xl">✅</span>
+          <span className="text-sm font-medium">Code PIN mis à jour !</span>
+        </div>
+      )}
+
+      {view === "nouvelle" ? (
+        <ChefCommandeView
+          catalogue={catalogue}
+          allRequests={requests}
+          onAddRequest={onAddRequest}
+          currentEmployee={currentEmployee}
+          myRequests={requests.filter((r) => r.par === currentEmployee)}
+        />
+      ) : view === "profil" ? (
+        <div className="p-5 max-w-md mx-auto">
+          <ProfilView currentUser={currentUser} pins={pins} onChangePin={onChangePin} />
+        </div>
+      ) : view === "monnaie" ? (
+        <div className="p-5">
+          <CashList
+            cashRequests={cashRequests}
+            employees={employees}
+            currentIdentity={currentUser?.name || "Chef d'équipe"}
+            onToggleDelivered={onToggleCashDelivered}
+            onRemove={onRemoveCashRequest}
+          />
+        </div>
+      ) : view === "home" ? (
+        <div className="p-5">
+          {cashRequests.filter((c) => !c.livre).length > 0 && (
+            <button
+              onClick={() => setView("monnaie")}
+              className="w-full bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3 mb-4 text-sm font-medium flex items-center gap-2 text-left"
+            >
+              💰
+              <span>
+                {cashRequests.filter((c) => !c.livre).length} demande{cashRequests.filter((c) => !c.livre).length > 1 ? "s" : ""} de monnaie en attente de livraison
+              </span>
+            </button>
+          )}
+          {requests.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 text-sm">
+              <Clock className="mx-auto mb-2" size={28} />
+              Aucune demande en attente
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-xs text-stone-400">{selectedIds.length} sélectionné(s)</span>
+                <div className="flex gap-3">
+                  <button onClick={selectAll} className="text-xs text-amber-700 underline">
+                    Tout sélectionner
+                  </button>
+                  {selectedIds.length > 0 && (
+                    <button onClick={clearSelection} className="text-xs text-stone-400 underline">
+                      Désélectionner
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2 mb-5">
+                {requests.map((r) => {
+                  const item = r.articleId ? catalogue.find((c) => c.id === r.articleId) : null;
+
+                  const isSelected = selectedIds.includes(r.id);
+                  const commentOpen = commentOpenId === r.id;
+                  return (
+                    <div
+                      key={r.id}
+                      className={`bg-white border rounded-xl px-4 py-3 transition-colors ${
+                        isSelected ? "border-amber-400 bg-amber-50" : "border-stone-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-3">
+                          <button
+                            onClick={() => toggleSelect(r.id)}
+                            className={`w-5 h-5 mt-0.5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                              isSelected ? "bg-amber-600 border-amber-600" : "border-stone-300 bg-white"
+                            }`}
+                          >
+                            {isSelected && <Check size={13} className="text-white" />}
+                          </button>
+                          <div>
+                            <div className="text-sm flex items-center gap-1 flex-wrap">
+                              {r.isNouveau && <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>}
+                              <span className={r.isNouveau ? "font-bold text-stone-900" : articleNameClass(item)}>
+                                {r.isNouveau ? (r.nomLibre || "Article libre") : (item ? item.name : "Article supprimé")}
+                              </span>
+                            </div>
+                            <div className="text-xs text-stone-400">
+                              {item?.code ? `${item.code} · ` : ""}
+                              {item?.category} {item?.subcategory ? `· ${item.subcategory}` : ""} · {r.par} ·{" "}
+                              {new Date(r.date).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={r.quantite}
+                            onChange={(e) => onUpdateQty(r.id, Number(e.target.value))}
+                            className="w-16 border border-stone-200 rounded-lg px-2 py-1 text-center text-sm"
+                          />
+                          <button
+                            onClick={() => setConfirmDelete({ id: r.id, label: item ? item.name : "cet article" })}
+                            className="text-stone-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 pl-8">
+                        {r.commentaire ? (
+                          <button
+                            onClick={() => setCommentOpenId(commentOpen ? null : r.id)}
+                            className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 inline-flex items-center gap-1"
+                          >
+                            💬 {r.commentaire}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setCommentOpenId(commentOpen ? null : r.id)}
+                            className="text-xs text-stone-400 underline"
+                          >
+                            + Ajouter un commentaire
+                          </button>
+                        )}
+
+                        {commentOpen && (
+                          <CommentEditor
+                            value={r.commentaire || ""}
+                            onSave={(text) => {
+                              onUpdateComment(r.id, text);
+                              setCommentOpenId(null);
+                            }}
+                            onCancel={() => setCommentOpenId(null)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-2">
+                {selectedIds.length > 0 && (
+                  <button
+                    onClick={() => {
+                      onValidate(selectedIds);
+                      setSelectedIds([]);
+                    }}
+                    className="w-full bg-amber-700 text-amber-50 rounded-xl py-3 font-medium hover:bg-amber-800 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Check size={18} /> Valider la sélection ({selectedIds.length})
+                  </button>
+                )}
+                <button
+                  onClick={() => onValidate()}
+                  className="w-full bg-emerald-600 text-white rounded-xl py-3 font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Check size={18} /> Valider toute la commande
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : view === "history" ? (
+        <div className="p-5">
+          {history.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 text-sm">Aucune commande passée encore</div>
+          ) : (
+            <HistoryByDate
+              history={history}
+              catalogue={catalogue}
+              employees={employees}
+              onToggleReceived={onToggleReceived}
+              onUpdateComment={onUpdateHistoryComment}
+              currentIdentity={currentUser?.name || "Chef d'équipe"}
+              mode="attente"
+            />
+          )}
+        </div>
+      ) : (
+        <div className="p-5">
+          {confirmClearHistory && (
+            <ConfirmDialog
+              title="Effacer tout l'historique ?"
+              message="Toutes les commandes validées seront supprimées définitivement."
+              onCancel={() => setConfirmClearHistory(false)}
+              onConfirm={() => { onClearHistory(); setConfirmClearHistory(false); }}
+            />
+          )}
+          {history.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 text-sm">Aucune commande passée encore</div>
+          ) : (
+            <>
+              <HistoryByDate
+                history={history}
+                catalogue={catalogue}
+                employees={employees}
+                onToggleReceived={onToggleReceived}
+                onUpdateComment={onUpdateHistoryComment}
+                currentIdentity={currentUser?.name || "Chef d'équipe"}
+                mode="livre"
+                onClearDay={(dayLabel) => onClearHistory(dayLabel)}
+              />
+              <button
+                onClick={() => setConfirmClearHistory(true)}
+                className="w-full mt-4 border border-red-200 text-red-500 rounded-xl py-3 text-sm font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 size={15} /> Effacer tout l'historique reçu
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function PartialDeliveryModal({ article, onFull, onPartial, onCancel }) {
+  const name = article.isNouveau ? (article.nomLibre || "Article libre") : (article.item?.name || "Article");
+  const [qty, setQty] = useState(article.quantite);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-6">
+      <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+        <div className="text-center mb-4">
+          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+            <span className="text-2xl">📦</span>
+          </div>
+          <h3 className="font-semibold text-stone-800 mb-1">Réception — {name}</h3>
+          <p className="text-sm text-stone-500">Quantité commandée : <span className="font-bold text-stone-700">{article.quantite}</span></p>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4 mb-4">
+          <p className="text-xs text-stone-500 mb-2 text-center">Quantité réellement reçue</p>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => setQty(q => Math.max(0, q - 1))} className="w-10 h-10 rounded-xl bg-white border border-stone-200 text-stone-600 font-bold text-lg flex items-center justify-center">−</button>
+            <input
+              type="number"
+              min="0"
+              max={article.quantite}
+              value={qty}
+              onChange={(e) => setQty(Math.min(article.quantite, Math.max(0, Number(e.target.value))))}
+              className="w-20 text-center border border-stone-200 rounded-xl py-2 text-lg font-bold"
+            />
+            <button onClick={() => setQty(q => Math.min(article.quantite, q + 1))} className="w-10 h-10 rounded-xl bg-white border border-stone-200 text-stone-600 font-bold text-lg flex items-center justify-center">+</button>
+          </div>
+          {qty < article.quantite && (
+            <p className="text-center text-xs text-red-500 mt-2 font-medium">⚠️ Manque : {article.quantite - qty} unité{article.quantite - qty > 1 ? "s" : ""}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <button
+            onClick={() => onFull()}
+            className="w-full bg-emerald-600 text-white rounded-xl py-3 font-medium hover:bg-emerald-700 transition-colors"
+          >
+            ✅ Tout reçu ({article.quantite})
+          </button>
+          <button
+            onClick={() => onPartial(qty)}
+            disabled={qty === article.quantite || qty === 0}
+            className="w-full bg-amber-600 text-white rounded-xl py-3 font-medium hover:bg-amber-700 transition-colors disabled:opacity-40"
+          >
+            ⚠️ Livraison partielle ({qty} reçus)
+          </button>
+          <button onClick={onCancel} className="w-full text-stone-400 text-sm py-2">Annuler</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HistoryByDate({ history, catalogue, employees, onToggleReceived, onUpdateComment, currentIdentity, mode, onClearDay }) {
+  const [selectedDate, setSelectedDate] = useState(""); // "YYYY-MM-DD", only used for mode "livre"
+  const [commentOpenId, setCommentOpenId] = useState(null);
+
+  const [justChecked, setJustChecked] = useState(null);
+  const [partialModal, setPartialModal] = useState(null); // { article, orderId }
+
+  function handleCheckClick(a) {
+    if (a.recu) {
+      onToggleReceived(a.orderId, a.id, currentIdentity || "Inconnu");
       return;
     }
-    onSubmit({ name, lat: coords.lat, lon: coords.lon });
-  };
+    // Ask if full or partial delivery
+    setPartialModal({ a, orderId: a.orderId });
+  }
+
+  function confirmReceived(a, quantiteRecue) {
+    setPartialModal(null);
+    setJustChecked(a.id);
+    setTimeout(() => {
+      onToggleReceived(a.orderId, a.id, currentIdentity || "Inconnu", quantiteRecue);
+      setJustChecked(null);
+    }, 600);
+  }
+
+  // Flatten + filter all articles across all orders according to mode
+  const flatArticles = [];
+  for (const order of history) {
+    for (const a of order.articles) {
+      const item = catalogue.find((c) => c.id === a.articleId);
+      flatArticles.push({ ...a, orderId: order.id, item, orderDate: order.date });
+    }
+  }
+  let filtered = mode === "livre" ? flatArticles.filter((a) => a.recu) : flatArticles.filter((a) => !a.recu);
+
+  if (mode === "livre" && selectedDate) {
+    filtered = filtered.filter((a) => {
+      const d = new Date(a.orderDate);
+      const localKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return localKey === selectedDate;
+    });
+  }
+
+  // Group filtered articles by calendar day (based on order date)
+  const byDay = {};
+  for (const a of filtered) {
+    const d = new Date(a.orderDate);
+    const dayKey = d.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+    if (!byDay[dayKey]) byDay[dayKey] = { date: d, articles: [] };
+    byDay[dayKey].articles.push(a);
+  }
+  const sortedDays = Object.entries(byDay).sort((a, b) => b[1].date - a[1].date);
 
   return (
-    <Modal onClose={onClose}>
-      <h3 style={styles.modalTitle}>Nouveau pays</h3>
-      <label style={styles.label}>Nom</label>
-      <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Islande" />
-      <p style={{ fontSize: 11, color: "#9AA39C", marginTop: 4 }}>
-        Les coordonnées sont trouvées automatiquement à partir du nom.
-      </p>
-      {notFound && (
-        <p style={{ fontSize: 12, color: "#E8785A", marginTop: 6 }}>
-          Pays introuvable, vérifie l'orthographe.
-        </p>
+    <div className="space-y-5">
+      {partialModal && (
+        <PartialDeliveryModal
+          article={partialModal.a}
+          onFull={() => confirmReceived(partialModal.a, partialModal.a.quantite)}
+          onPartial={(qty) => confirmReceived(partialModal.a, qty)}
+          onCancel={() => setPartialModal(null)}
+        />
       )}
-      <button style={styles.primaryBtn} disabled={!name || resolving} onClick={handleCreate}>
-        {resolving ? "Recherche…" : "Créer ce pays"}
-      </button>
-    </Modal>
+      {mode === "livre" && (
+        <div className="bg-white border border-stone-200 rounded-xl p-3 flex items-center gap-3">
+          <Clock className="text-stone-400 shrink-0" size={16} />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-700"
+          />
+          {selectedDate && (
+            <button onClick={() => setSelectedDate("")} className="text-xs text-amber-700 underline shrink-0">
+              Tout voir
+            </button>
+          )}
+        </div>
+      )}
+
+      {mode === "attente" && filtered.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="text-amber-600" size={16} />
+            <span className="text-sm font-semibold text-amber-700">
+              {filtered.length} article{filtered.length > 1 ? "s" : ""} en attente de livraison
+              {filtered.filter(a => a.isReste).length > 0 && (
+                <span className="ml-2 text-orange-600">· {filtered.filter(a => a.isReste).length} reste{filtered.filter(a => a.isReste).length > 1 ? "s" : ""} à livrer</span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-stone-400 text-sm">
+          {mode === "livre"
+            ? selectedDate
+              ? "Aucun article livré ce jour-là"
+              : "Aucun article livré pour le moment"
+            : "Tout a été livré 🎉"}
+        </div>
+      ) : (
+        sortedDays.map(([dayLabel, { articles }]) => {
+          const byCategory = {};
+          for (const a of articles) {
+            const cat = a.item?.category || "Sans catégorie";
+            if (!byCategory[cat]) byCategory[cat] = [];
+            byCategory[cat].push(a);
+          }
+          function printDay(dayLabel, byCategory) {
+            // Build print content
+            const articleRows = Object.entries(byCategory).map(([cat, items]) =>
+              `<div style="margin-bottom:12px"><div style="font-weight:bold;color:#78350f;font-size:12px;text-transform:uppercase;border-bottom:1px solid #e7e5e4;padding-bottom:4px;margin-bottom:6px">${cat}</div>` +
+              items.map(a => {
+                const name = a.isNouveau ? (a.nomLibre || 'Article libre') : (a.item?.name || 'Article');
+                const code = a.item?.code ? `${a.item.code} · ` : '';
+                const status = a.recu ? '✅' : '⏳';
+                return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+                  <span>${status} ${code}${name}${a.isNouveau ? ' 🆕' : ''} <span style="color:#888;font-size:11px">(${a.par})</span></span>
+                  <span style="font-weight:bold">x${a.quantite}</span>
+                </div>`;
+              }).join('') + '</div>'
+            ).join('');
+            
+            const printContent = `
+              <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px">
+                <div style="text-align:center;margin-bottom:16px">
+                  <div style="background:#78350f;color:#fef3c7;border-radius:50%;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:20px;margin:0 auto 8px">CG</div>
+                  <div style="font-size:18px;font-weight:bold;color:#78350f">Brasserie Chez Gustave</div>
+                  <div style="font-size:13px;color:#888;margin-top:4px">Commande du ${dayLabel}</div>
+                </div>
+                ${articleRows}
+                <div style="margin-top:16px;font-size:10px;color:#aaa;text-align:center">Chez Gustave Stock — ${new Date().toLocaleDateString('fr-FR')}</div>
+              </div>`;
+            
+            // Create iframe for printing (works on mobile)
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+            iframe.contentDocument.open();
+            iframe.contentDocument.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@media print{body{margin:0}}</style></head><body>${printContent}</body></html>`);
+            iframe.contentDocument.close();
+            setTimeout(() => {
+              iframe.contentWindow.focus();
+              iframe.contentWindow.print();
+              setTimeout(() => document.body.removeChild(iframe), 1000);
+            }, 500);
+          }
+
+          return (
+            <div key={dayLabel}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-medium text-amber-700 uppercase tracking-wide capitalize">
+                  {dayLabel}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => printDay(dayLabel, byCategory, articles)}
+                    className="text-xs text-stone-400 hover:text-amber-700 flex items-center gap-1 border border-stone-200 rounded-lg px-2 py-1 hover:border-amber-300 transition-colors"
+                  >
+                    🖨️ Imprimer
+                  </button>
+                  {mode === "livre" && onClearDay && (
+                    <button
+                      onClick={() => onClearDay(dayLabel)}
+                      className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1 hover:border-red-300 transition-colors"
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="bg-white border border-stone-200 rounded-xl p-4 space-y-3">
+                {Object.entries(byCategory).map(([cat, items]) => (
+                  <div key={cat}>
+                    <div className="text-xs font-semibold text-stone-500 mb-1">{cat}</div>
+                    <div className="space-y-2">
+                      {items.map((a) => (
+                        <div key={a.id} className={`flex items-start gap-2 text-sm py-0.5 rounded-lg px-1 ${a.isReste && mode === "attente" ? "bg-orange-50 border border-orange-200" : ""}`}>
+                          {a.isReste && mode === "attente" && (
+                            <div className="w-full mb-1 text-[11px] text-orange-600 font-medium flex items-center gap-1">
+                              🔄 Reste à livrer — commande du {a.resteDepuis}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => handleCheckClick(a)}
+                            className={`w-5 h-5 mt-0.5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                              a.recu || justChecked === a.id ? "bg-emerald-600 border-emerald-600" : a.isReste ? "border-orange-400 bg-orange-50" : "border-stone-300 bg-white"
+                            }`}
+                          >
+                            {(a.recu || justChecked === a.id) && <Check size={13} className="text-white" />}
+                          </button>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="flex items-center gap-1 flex-wrap flex-1">
+                                {a.isNouveau && <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>}
+                                {a.livraisonPartielle && <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">⚠️ {a.manquant} manquant{a.manquant > 1 ? 's' : ''}</span>}
+                                <span className="text-stone-400 font-normal text-xs">{a.item?.code ? `${a.item.code} · ` : ""}</span>
+                                <span className={a.isNouveau ? "font-bold text-stone-900" : articleNameClass(a.item)}>
+                                  {a.isNouveau ? (a.nomLibre || "Article libre") : (a.item ? a.item.name : "Article supprimé")}
+                                </span>
+                              </span>
+                              <span className="text-stone-400 text-xs">x{a.quantite}</span>
+                            </div>
+                            <div className="text-[11px] text-stone-400 mt-0.5">
+                              Commandé par <span className="font-medium text-stone-500">{a.par}</span>
+                              {a.isReste && mode === "livre" && (
+                                <span className="text-stone-400"> · Reçu en 2 fois</span>
+                              )}
+                              {a.recuPar && (
+                                <>
+                                  {" "}
+                                  · Reçu par <span className="font-medium text-emerald-600">{a.recuPar}</span>
+                                  {a.recuDate && (
+                                    <> le {new Date(a.recuDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</>
+                                  )}
+                                </>
+                              )}
+                              {a.corrigePar && (
+                                <>
+                                  {" "}
+                                  · <span className="font-medium text-orange-600">
+                                    {a.recu ? "Re-confirmé" : "Corrigé (non livré)"} par {a.corrigePar}
+                                  </span>
+                                  {a.corrigeDate && (
+                                    <> le {new Date(a.corrigeDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</>
+                                  )}
+                                </>
+                              )}
+                            </div>
+
+                            <div className="mt-1">
+                              {a.commentaire ? (
+                                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 inline-flex items-center gap-1">
+                                  💬 {a.commentaire}
+                                </div>
+                              ) : mode === "livre" ? (
+                                <button
+                                  onClick={() => setCommentOpenId(commentOpenId === a.id ? null : a.id)}
+                                  className="text-xs text-stone-400 underline"
+                                >
+                                  + Ajouter un commentaire
+                                </button>
+                              ) : null}
+
+                              {commentOpenId === a.id && mode === "livre" && (
+                                <CommentEditor
+                                  value={a.commentaire || ""}
+                                  onSave={(text) => {
+                                    onUpdateComment && onUpdateComment(a.orderId, a.id, text);
+                                    setCommentOpenId(null);
+                                  }}
+                                  onCancel={() => setCommentOpenId(null)}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }
 
-function ProfileFormModal({ profile, onClose, onSubmit }) {
-  const [prenom, setPrenom] = useState(profile.prenom);
-  const [nom, setNom] = useState(profile.nom);
-  const [phrase, setPhrase] = useState(profile.phrase);
-  const [photoUrl, setPhotoUrl] = useState(profile.photoUrl);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const [pendingFile, setPendingFile] = useState(null);
-  const [preparing, setPreparing] = useState(false);
+function CatalogueManager({ catalogue, onAdd, onUpdate, onRemove, onRenameCategory, onRenameSubcategory, onMoveCategoryInto, onMoveSubcategoryInto, onDeleteCategory, onDeleteSubcategory, onDissolveSubcategory }) {
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
+  const [newSubcategory, setNewSubcategory] = useState("");
+  const [minStock, setMinStock] = useState("");
+  const [minUnit, setMinUnit] = useState("pièce");
+  const [groupe, setGroupe] = useState("Alimentaire");
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, label }
+  const [editingItem, setEditingItem] = useState(null); // { id, code, name }
+  const [editingCat, setEditingCat] = useState(null); // { oldName, newName }
+  const [editingSub, setEditingSub] = useState(null); // { category, oldSub, newSub }
+  // Empty category creation
+  const [showNewCatBox, setShowNewCatBox] = useState(false);
+  const [emptyCatGroupe, setEmptyCatGroupe] = useState("Alimentaire");
+  const [emptyCatName, setEmptyCatName] = useState("");
+  const [emptyCatSub, setEmptyCatSub] = useState("");
+  // Moving category/subcategory
+  const [movingCat, setMovingCat] = useState(null); // { source }
+  const [movingSub, setMovingSub] = useState(null); // { sourceCat, sourceSub }
+  const [moveTarget, setMoveTarget] = useState("");
+  const [moveNewSub, setMoveNewSub] = useState("");
+  // Deleting category/subcategory
+  const [confirmDeleteCat, setConfirmDeleteCat] = useState(null); // cat name
+  const [confirmDeleteSub, setConfirmDeleteSub] = useState(null); // { cat, sub }
+  // Filter catalogue view by groupe
+  const [viewGroupe, setViewGroupe] = useState("Alimentaire");
+  const visibleCatalogue = catalogue.filter((c) => (c?.groupe || "Alimentaire") === viewGroupe);
+  const tree = groupCatalogue(visibleCatalogue);
 
-  const onPickFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploadError("");
-    setPreparing(true);
-    try {
-      const prepared = await compressImage(file, 2000, 0.85);
-      setPendingFile(prepared);
-    } catch (err) {
-      console.error(err);
-      setUploadError("Impossible de préparer cette photo (format non supporté ?). Essaie une autre photo.");
-    } finally {
-      setPreparing(false);
-    }
-  };
+  function createEmptyCategory() {
+    if (!emptyCatName.trim()) return;
+    // Create category via a placeholder item (hidden from ordering views)
+    onAdd({
+      code: "",
+      name: "__placeholder__",
+      groupe: emptyCatGroupe,
+      category: emptyCatName.trim(),
+      subcategory: emptyCatSub.trim() || "Général",
+      minStock: 0,
+      minUnit: "pièce",
+      _placeholder: true,
+    });
+    setEmptyCatName("");
+    setEmptyCatSub("");
+    setShowNewCatBox(false);
+  }
 
-  const onCropConfirm = async (blob) => {
-    setPendingFile(null);
-    setUploading(true);
-    setUploadError("");
-    try {
-      const url = await uploadToStorage(blob, "profil.jpg");
-      setPhotoUrl(url);
-    } catch (err) {
-      console.error("Erreur d'upload", err);
-      setUploadError("Échec de l'envoi. Vérifie que le bucket 'Photos' existe, est public, et autorise l'upload.");
-    } finally {
-      setUploading(false);
+  const existingCategories = Object.keys(tree).sort();
+  // Categories available in the add form, based on the groupe selected there
+  const addFormCategories = Object.keys(
+    groupCatalogue(catalogue.filter((c) => (c?.groupe || "Alimentaire") === groupe))
+  ).sort();
+  const finalCategory = category === "__new__" ? newCategory.trim() : category;
+  const subcategoriesForCategory = category && category !== "__new__" ? Object.keys(tree[category] || {}).sort() : [];
+  const finalSubcategory = subcategory === "__new__" ? newSubcategory.trim() : subcategory;
+
+  function submit() {
+    if (!name.trim() || !finalCategory) return;
+    onAdd({
+      code: code.trim(),
+      name: name.trim(),
+      groupe: groupe,
+      category: finalCategory,
+      subcategory: finalSubcategory || "Général",
+      minStock: minStock ? Number(minStock) : 0,
+      minUnit: minUnit,
+    });
+    setCode("");
+    setName("");
+    setMinStock("");
+    if (category === "__new__") {
+      setCategory(finalCategory);
+      setNewCategory("");
     }
-  };
+    if (subcategory === "__new__") {
+      setSubcategory(finalSubcategory);
+      setNewSubcategory("");
+    }
+  }
 
   return (
-    <>
-    {pendingFile && (
-      <ImageCropper file={pendingFile} aspect={16 / 9} onCancel={() => setPendingFile(null)} onConfirm={onCropConfirm} />
-    )}
-    <Modal onClose={onClose}>
-      <h3 style={styles.modalTitle}>Modifier le profil</h3>
-      <label style={styles.label}>Prénom</label>
-      <input style={styles.input} value={prenom} onChange={(e) => setPrenom(e.target.value)} />
-      <label style={styles.label}>Nom</label>
-      <input style={styles.input} value={nom} onChange={(e) => setNom(e.target.value)} />
-      <label style={styles.label}>Phrase</label>
-      <input style={styles.input} value={phrase} onChange={(e) => setPhrase(e.target.value)} />
-
-      <label style={styles.label}>Photo de fond — depuis ta galerie</label>
-      <input type="file" accept="image/*" style={styles.input} onChange={onPickFile} disabled={uploading || preparing} />
-      {preparing && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Préparation de la photo…</p>}
-      {uploading && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Envoi en cours…</p>}
-      {uploadError && <p style={{ fontSize: 12, color: "#E8785A", margin: "6px 0 0" }}>{uploadError}</p>}
-      {photoUrl && !uploading && (
-        <img src={photoUrl} alt="Aperçu" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginTop: 10, filter: "grayscale(100%)" }} />
+    <div className="p-5 max-w-md mx-auto">
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Supprimer cet article ?"
+          message={`"${confirmDelete.label}" sera retiré définitivement du catalogue.`}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => {
+            onRemove(confirmDelete.id);
+            setConfirmDelete(null);
+          }}
+        />
       )}
-
-      <label style={styles.label}>...ou colle une URL d'image</label>
-      <input style={styles.input} value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://..." />
-      <button style={styles.primaryBtn} disabled={uploading} onClick={() => onSubmit({ prenom, nom, phrase, photoUrl })}>Enregistrer</button>
-    </Modal>
-    </>
-  );
-}
-
-async function geocodeCity(name) {
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(name)}`;
-    const res = await fetch(url);
-    const results = await res.json();
-    if (results && results[0]) {
-      return { lat: parseFloat(results[0].lat), lon: parseFloat(results[0].lon) };
-    }
-  } catch (e) {
-    console.error("Erreur de géocodage pour", name, e);
-  }
-  return null;
-}
-
-function extractAllRings(geojson, maxRings = 25) {
-  if (!geojson) return [];
-  if (geojson.type === "Polygon") return [geojson.coordinates[0]];
-  if (geojson.type === "MultiPolygon") {
-    // Garde les plus grandes masses de terre (une île avec beaucoup de points de contour
-    // est une île significative) ; les centaines de petits îlots n'ajoutent rien à la lecture
-    // de la carte mais peuvent faire planter le rendu (ex : Grèce, Philippines, Indonésie).
-    const rings = geojson.coordinates.map((poly) => poly[0]).filter(Boolean);
-    return rings.sort((a, b) => b.length - a.length).slice(0, maxRings);
-  }
-  return [];
-}
-
-function decimateRing(ring, maxPoints = 300) {
-  if (ring.length <= maxPoints) return ring;
-  const step = Math.ceil(ring.length / maxPoints);
-  return ring.filter((_, i) => i % step === 0);
-}
-
-async function fetchCountryBorder(name) {
-  const tryFetch = async (url) => {
-    const res = await fetch(url);
-    const results = await res.json();
-    return results && results[0] ? extractAllRings(results[0].geojson) : [];
-  };
-  try {
-    // 1) On cherche d'abord un vrai pays (évite qu'un nom de pays tombe sur un lieu homonyme)
-    const countryUrl = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&polygon_threshold=0.01&limit=1&featureType=country&q=${encodeURIComponent(name)}`;
-    let rings = await tryFetch(countryUrl);
-
-    // 2) Si ce n'est pas un pays (île, région, ville — ex : Kimolos, Majorque), recherche libre
-    if (rings.length === 0) {
-      const generalUrl = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&polygon_threshold=0.005&limit=1&q=${encodeURIComponent(name)}`;
-      rings = await tryFetch(generalUrl);
-    }
-
-    return rings
-      .filter((r) => r && r.length > 0)
-      .map((ring) => decimateRing(ring).map(([lon, lat]) => ({ lat, lon })));
-  } catch (e) {
-    console.error("Erreur de récupération de frontière pour", name, e);
-  }
-  return [];
-}
-
-function TileImageModal({ country, onClose, onSubmit }) {
-  const [src, setSrc] = useState(country?.tileImage || "");
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const [pendingFile, setPendingFile] = useState(null);
-  const [preparing, setPreparing] = useState(false);
-
-  const onPickFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploadError("");
-    setPreparing(true);
-    try {
-      const prepared = await compressImage(file, 1600, 0.85);
-      setPendingFile(prepared);
-    } catch (err) {
-      console.error(err);
-      setUploadError("Impossible de préparer cette photo (format non supporté ?). Essaie une autre photo.");
-    } finally {
-      setPreparing(false);
-    }
-  };
-
-  const onCropConfirm = async (blob) => {
-    setPendingFile(null);
-    setUploading(true);
-    setUploadError("");
-    try {
-      const url = await uploadToStorage(blob, "tuile.jpg");
-      setSrc(url);
-    } catch (err) {
-      console.error(err);
-      setUploadError("Échec de l'envoi. Réessaie.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  if (!country) return null;
-
-  return (
-    <>
-      {pendingFile && (
-        <ImageCropper file={pendingFile} aspect={3 / 4} onCancel={() => setPendingFile(null)} onConfirm={onCropConfirm} />
+      {confirmDeleteCat && (
+        <ConfirmDialog
+          title="Supprimer toute la catégorie ?"
+          message={`La catégorie "${confirmDeleteCat}" et TOUS ses articles seront supprimés définitivement.`}
+          onCancel={() => setConfirmDeleteCat(null)}
+          onConfirm={() => {
+            onDeleteCategory(confirmDeleteCat);
+            setConfirmDeleteCat(null);
+          }}
+        />
       )}
-      <Modal onClose={onClose}>
-        <h3 style={styles.modalTitle}>Image de la tuile — {country.name}</h3>
-        <label style={styles.label}>Depuis ta galerie</label>
-        <input type="file" accept="image/*" style={styles.input} onChange={onPickFile} disabled={uploading || preparing} />
-        {preparing && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Préparation de la photo…</p>}
-        {uploading && <p style={{ fontSize: 12, color: "#9AA39C", margin: "6px 0 0" }}>Envoi en cours…</p>}
-        {uploadError && <p style={{ fontSize: 12, color: "#E8785A", margin: "6px 0 0" }}>{uploadError}</p>}
-        {src && !uploading && (
-          <img src={src} alt="Aperçu" style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 8, marginTop: 10 }} />
+      {confirmDeleteSub && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-6">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Sous-catégorie "{confirmDeleteSub.sub}"</h3>
+            <p className="text-sm text-stone-500 mb-5">Que veux-tu faire ?</p>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  onDissolveSubcategory(confirmDeleteSub.cat, confirmDeleteSub.sub);
+                  setConfirmDeleteSub(null);
+                }}
+                className="w-full bg-amber-600 text-white rounded-xl py-3 px-4 text-sm font-medium hover:bg-amber-700 transition-colors text-left"
+              >
+                📤 Enlever seulement l'appellation
+                <div className="text-xs font-normal text-amber-100 mt-0.5">Les articles remontent dans "{confirmDeleteSub.cat}"</div>
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteSubcategory(confirmDeleteSub.cat, confirmDeleteSub.sub);
+                  setConfirmDeleteSub(null);
+                }}
+                className="w-full bg-red-500 text-white rounded-xl py-3 px-4 text-sm font-medium hover:bg-red-600 transition-colors text-left"
+              >
+                🗑️ Tout supprimer
+                <div className="text-xs font-normal text-red-100 mt-0.5">La sous-catégorie ET ses articles</div>
+              </button>
+              <button onClick={() => setConfirmDeleteSub(null)} className="w-full text-stone-400 text-sm py-2">Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="bg-white border border-stone-200 rounded-xl p-4 mb-6">
+        <h3 className="text-sm font-medium text-stone-700 mb-3">Ajouter un article</h3>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Code article (ex: BOI-004)"
+              className="w-36 border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nom de l'article"
+              className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <select
+              value={groupe}
+              onChange={(e) => setGroupe(e.target.value)}
+              className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              <option value="Alimentaire">🧃 Alimentaire</option>
+              <option value="Non Alimentaire">🥡 Non Alimentaire</option>
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setSubcategory("");
+                setNewSubcategory("");
+              }}
+              className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              <option value="">Catégorie…</option>
+              {addFormCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+              <option value="__new__">+ Créer une nouvelle catégorie</option>
+            </select>
+          </div>
+          {category === "__new__" && (
+            <input
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              placeholder="Nom de la nouvelle catégorie"
+              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm"
+              autoFocus
+            />
+          )}
+
+          <div className="flex gap-2">
+            <select
+              value={subcategory}
+              onChange={(e) => setSubcategory(e.target.value)}
+              disabled={!category}
+              className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-stone-100 disabled:text-stone-400"
+            >
+              <option value="">Sous-catégorie…</option>
+              {subcategoriesForCategory.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+              <option value="__new__">+ Créer une nouvelle sous-catégorie</option>
+            </select>
+          </div>
+          {subcategory === "__new__" && (
+            <input
+              value={newSubcategory}
+              onChange={(e) => setNewSubcategory(e.target.value)}
+              placeholder="Nom de la nouvelle sous-catégorie"
+              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm"
+              autoFocus
+            />
+          )}
+
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="0"
+              value={minStock}
+              onChange={(e) => setMinStock(e.target.value)}
+              placeholder="Stock min"
+              className="w-24 border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <select
+              value={minUnit}
+              onChange={(e) => setMinUnit(e.target.value)}
+              className="flex-1 border border-stone-200 rounded-lg px-2 py-2 text-sm bg-white"
+            >
+              <option value="pièce">Pièce</option>
+              <option value="btl">Btl</option>
+              <option value="kg">Kg</option>
+              <option value="litre">Litre</option>
+              <option value="carton">Carton</option>
+            </select>
+            <button onClick={submit} className="bg-stone-800 text-white px-4 rounded-lg text-sm flex items-center gap-1">
+              <Plus size={14} /> Ajouter
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-stone-200 rounded-xl p-4 mb-6">
+        {!showNewCatBox ? (
+          <button
+            onClick={() => setShowNewCatBox(true)}
+            className="w-full text-sm font-medium text-amber-700 border-2 border-dashed border-amber-300 rounded-lg py-3 hover:bg-amber-50 transition-colors"
+          >
+            📁 Créer une catégorie vide
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-stone-700">Nouvelle catégorie vide</h3>
+            <p className="text-xs text-stone-400">Créez la catégorie puis déplacez-y des articles existants.</p>
+            <select
+              value={emptyCatGroupe}
+              onChange={(e) => setEmptyCatGroupe(e.target.value)}
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              <option value="Alimentaire">🧃 Alimentaire</option>
+              <option value="Non Alimentaire">🥡 Non Alimentaire</option>
+            </select>
+            <input
+              value={emptyCatName}
+              onChange={(e) => setEmptyCatName(e.target.value)}
+              placeholder="Nom de la catégorie"
+              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm"
+              autoFocus
+            />
+            <input
+              value={emptyCatSub}
+              onChange={(e) => setEmptyCatSub(e.target.value)}
+              placeholder="Sous-catégorie (optionnel)"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={createEmptyCategory} className="bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-medium">✓ Enregistrer</button>
+              <button onClick={() => { setShowNewCatBox(false); setEmptyCatName(""); setEmptyCatSub(""); }} className="text-stone-400 text-sm px-2">Annuler</button>
+            </div>
+          </div>
         )}
-        <label style={styles.label}>...ou colle une URL d'image</label>
-        <input style={styles.input} value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://..." />
-        <button style={styles.primaryBtn} disabled={uploading} onClick={() => onSubmit(src)}>Enregistrer</button>
-      </Modal>
-    </>
+      </div>
+
+      <h3 className="text-xs uppercase tracking-wide text-stone-400 mb-2">Catalogue actuel</h3>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <button
+          onClick={() => setViewGroupe("Alimentaire")}
+          className={`rounded-xl py-2.5 text-sm font-medium transition-all ${
+            viewGroupe === "Alimentaire"
+              ? "bg-stone-800 text-white shadow-md"
+              : "bg-white text-stone-500 border border-stone-200"
+          }`}
+        >
+          🧃 Alimentaires
+        </button>
+        <button
+          onClick={() => setViewGroupe("Non Alimentaire")}
+          className={`rounded-xl py-2.5 text-sm font-medium transition-all ${
+            viewGroupe === "Non Alimentaire"
+              ? "bg-amber-600 text-white shadow-md"
+              : "bg-white text-amber-600 border border-amber-200"
+          }`}
+        >
+          🥡 Non Alimentaires
+        </button>
+      </div>
+      <p className="text-xs text-stone-400 mb-3">✏️ Touchez un nom pour le modifier</p>
+      <div className="space-y-4">
+        {Object.entries(tree).map(([cat, subs]) => (
+          <div key={cat}>
+            {editingCat?.oldName === cat ? (
+              <div className="flex items-center gap-2 mb-1">
+                <input
+                  value={editingCat.newName}
+                  onChange={(e) => setEditingCat({ ...editingCat, newName: e.target.value })}
+                  className="flex-1 border border-amber-300 rounded-lg px-2 py-1 text-sm font-medium"
+                  autoFocus
+                />
+                <button onClick={() => { onRenameCategory(cat, editingCat.newName); setEditingCat(null); }} className="text-emerald-600 text-sm font-medium">✓</button>
+                <button onClick={() => setEditingCat(null)} className="text-stone-400 text-sm">✕</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-1">
+                <button
+                  onClick={() => setEditingCat({ oldName: cat, newName: cat })}
+                  className="text-sm font-medium text-stone-800 flex items-center gap-1 hover:text-amber-700"
+                >
+                  {cat} <span className="text-stone-300 text-xs">✏️</span>
+                </button>
+                <button
+                  onClick={() => { setMovingCat({ source: cat }); setMoveTarget(""); setMoveNewSub(""); }}
+                  className="text-xs text-stone-400 hover:text-amber-600 border border-stone-200 rounded px-1.5 py-0.5"
+                  title="Déplacer cette catégorie dans une autre"
+                >
+                  📦→
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteCat(cat)}
+                  className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded px-1.5 py-0.5"
+                  title="Supprimer toute la catégorie"
+                >
+                  🗑️
+                </button>
+              </div>
+            )}
+            {movingCat?.source === cat && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2 space-y-2">
+                <p className="text-xs text-stone-600">Déplacer <b>{cat}</b> dans :</p>
+                <select
+                  value={moveTarget}
+                  onChange={(e) => setMoveTarget(e.target.value)}
+                  className="w-full border border-amber-300 rounded-lg px-2 py-1 text-xs bg-white"
+                >
+                  <option value="">Choisir la catégorie cible…</option>
+                  {Object.keys(tree).filter(c => c !== cat).sort().map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input
+                  value={moveNewSub}
+                  onChange={(e) => setMoveNewSub(e.target.value)}
+                  placeholder={`Nom sous-catégorie (défaut: ${cat})`}
+                  className="w-full border border-stone-200 rounded-lg px-2 py-1 text-xs"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => { if (moveTarget) { onMoveCategoryInto(cat, moveTarget, moveNewSub); setMovingCat(null); } }}
+                    disabled={!moveTarget}
+                    className="bg-emerald-600 text-white rounded-lg px-3 py-1 text-xs font-medium disabled:opacity-40"
+                  >
+                    ✓ Déplacer
+                  </button>
+                  <button onClick={() => setMovingCat(null)} className="text-stone-400 text-xs px-2">Annuler</button>
+                </div>
+              </div>
+            )}
+            {Object.entries(subs).map(([sub, items]) => (
+              <div key={sub} className="mb-2">
+                {editingSub?.category === cat && editingSub?.oldSub === sub ? (
+                  <div className="flex items-center gap-2 mb-1 pl-2">
+                    <input
+                      value={editingSub.newSub}
+                      onChange={(e) => setEditingSub({ ...editingSub, newSub: e.target.value })}
+                      className="flex-1 border border-amber-300 rounded-lg px-2 py-1 text-xs"
+                      autoFocus
+                    />
+                    <button onClick={() => { onRenameSubcategory(cat, sub, editingSub.newSub); setEditingSub(null); }} className="text-emerald-600 text-xs">✓</button>
+                    <button onClick={() => setEditingSub(null)} className="text-stone-400 text-xs">✕</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mb-1 pl-2">
+                    <button
+                      onClick={() => setEditingSub({ category: cat, oldSub: sub, newSub: sub })}
+                      className="text-xs text-stone-400 flex items-center gap-1 hover:text-amber-600"
+                    >
+                      {sub} <span className="text-stone-300">✏️</span>
+                    </button>
+                    <button
+                      onClick={() => { setMovingSub({ sourceCat: cat, sourceSub: sub }); setMoveTarget(""); setMoveNewSub(""); }}
+                      className="text-[10px] text-stone-400 hover:text-amber-600 border border-stone-200 rounded px-1 py-0.5"
+                      title="Déplacer cette sous-catégorie dans une autre catégorie"
+                    >
+                      📦→
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteSub({ cat, sub })}
+                      className="text-[10px] text-red-400 hover:text-red-600 border border-red-100 rounded px-1 py-0.5"
+                      title="Supprimer toute la sous-catégorie"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                )}
+                {movingSub?.sourceCat === cat && movingSub?.sourceSub === sub && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2 ml-2 space-y-2">
+                    <p className="text-xs text-stone-600">Déplacer <b>{sub}</b> dans :</p>
+                    <select
+                      value={moveTarget}
+                      onChange={(e) => setMoveTarget(e.target.value)}
+                      className="w-full border border-amber-300 rounded-lg px-2 py-1 text-xs bg-white"
+                    >
+                      <option value="">Choisir la catégorie cible…</option>
+                      {Object.keys(tree).filter(c => c !== cat).sort().map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input
+                      value={moveNewSub}
+                      onChange={(e) => setMoveNewSub(e.target.value)}
+                      placeholder={`Nom sous-catégorie (défaut: ${sub})`}
+                      className="w-full border border-stone-200 rounded-lg px-2 py-1 text-xs"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => { if (moveTarget) { onMoveSubcategoryInto(cat, sub, moveTarget, moveNewSub); setMovingSub(null); } }}
+                        disabled={!moveTarget}
+                        className="bg-emerald-600 text-white rounded-lg px-3 py-1 text-xs font-medium disabled:opacity-40"
+                      >
+                        ✓ Déplacer
+                      </button>
+                      <button onClick={() => setMovingSub(null)} className="text-stone-400 text-xs px-2">Annuler</button>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      {editingItem?.id === item.id ? (
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              value={editingItem.code}
+                              onChange={(e) => setEditingItem({ ...editingItem, code: e.target.value })}
+                              placeholder="Code"
+                              className="w-28 border border-amber-300 rounded px-2 py-1 text-xs"
+                            />
+                            <input
+                              value={editingItem.name}
+                              onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                              placeholder="Nom"
+                              className="flex-1 border border-amber-300 rounded px-2 py-1 text-sm"
+                              autoFocus
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-stone-400 uppercase">Groupe</label>
+                            <select
+                              value={editingItem.groupe}
+                              onChange={(e) => setEditingItem({ ...editingItem, groupe: e.target.value })}
+                              className="w-full border border-amber-300 rounded px-2 py-1 text-xs bg-white"
+                            >
+                              <option value="Alimentaire">🧃 Alimentaire</option>
+                              <option value="Non Alimentaire">🥡 Non Alimentaire</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-stone-400 uppercase">Catégorie</label>
+                            <select
+                              value={editingItem.catMode === "new" ? "__new__" : editingItem.category}
+                              onChange={(e) => {
+                                if (e.target.value === "__new__") setEditingItem({ ...editingItem, catMode: "new", category: "" });
+                                else setEditingItem({ ...editingItem, catMode: "existing", category: e.target.value });
+                              }}
+                              className="w-full border border-amber-300 rounded px-2 py-1 text-xs bg-white"
+                            >
+                              {Object.keys(groupCatalogue(catalogue.filter((c) => (c?.groupe || "Alimentaire") === editingItem.groupe))).sort().map((c) => <option key={c} value={c}>{c}</option>)}
+                              <option value="__new__">+ Nouvelle catégorie</option>
+                            </select>
+                            {editingItem.catMode === "new" && (
+                              <input
+                                value={editingItem.category}
+                                onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
+                                placeholder="Nom nouvelle catégorie"
+                                className="w-full border border-amber-300 rounded px-2 py-1 text-xs mt-1"
+                              />
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-stone-400 uppercase">Sous-catégorie</label>
+                            <input
+                              value={editingItem.subcategory}
+                              onChange={(e) => setEditingItem({ ...editingItem, subcategory: e.target.value })}
+                              placeholder="Sous-catégorie"
+                              className="w-full border border-amber-300 rounded px-2 py-1 text-xs"
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => {
+                                onUpdate(item.id, {
+                                  code: editingItem.code.trim(),
+                                  name: editingItem.name.trim(),
+                                  groupe: editingItem.groupe,
+                                  category: editingItem.category.trim() || item.category,
+                                  subcategory: editingItem.subcategory.trim() || "Général",
+                                });
+                                setEditingItem(null);
+                              }}
+                              className="bg-emerald-600 text-white rounded-lg px-3 py-1 text-xs font-medium"
+                            >
+                              ✓ Enregistrer
+                            </button>
+                            <button onClick={() => setEditingItem(null)} className="text-stone-400 text-xs px-2">Annuler</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <button
+                            onClick={() => setEditingItem({ id: item.id, code: item.code || "", name: item.name, groupe: item.groupe || "Alimentaire", category: item.category, subcategory: item.subcategory || "Général", catMode: "existing" })}
+                            className="text-stone-700 text-left flex-1 flex items-center gap-1 hover:text-amber-700"
+                          >
+                            <span>{item.code ? `${item.code} · ` : ""}{item.name}</span>
+                            <span className="text-stone-300 text-xs">✏️</span>
+                          </button>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1 text-xs text-stone-400">
+                              Min
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.minStock}
+                                onChange={(e) => onUpdate(item.id, { minStock: Number(e.target.value) })}
+                                className="w-12 border border-stone-200 rounded px-1 py-0.5 text-center"
+                              />
+                              <select
+                                value={item.minUnit || "pièce"}
+                                onChange={(e) => onUpdate(item.id, { minUnit: e.target.value })}
+                                className="border border-stone-200 rounded px-1 py-0.5 text-xs bg-white"
+                              >
+                                <option value="pièce">Pièce</option>
+                                <option value="btl">Btl</option>
+                                <option value="kg">Kg</option>
+                                <option value="litre">Litre</option>
+                                <option value="carton">Carton</option>
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => setConfirmDelete({ id: item.id, label: item.name })}
+                              className="text-stone-300 hover:text-red-500"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
-
-function CoverEditModal({ country, onClose, onSubmit }) {
-  const [name, setName] = useState(country.name || "");
-  const [story, setStory] = useState(country.story || "");
-  const [citiesText, setCitiesText] = useState((country.cities || []).map((c) => c.name).join("\n"));
-  const [resolving, setResolving] = useState(false);
-  const [failedNames, setFailedNames] = useState([]);
-  const [refreshBorder, setRefreshBorder] = useState(false);
-
-  const handleSubmit = async () => {
-    const names = citiesText.split("\n").map((n) => n.trim()).filter(Boolean);
-    setResolving(true);
-    setFailedNames([]);
-    const existing = country.cities || [];
-    const resolved = [];
-    const failed = [];
-    for (const cityName of names) {
-      const already = existing.find((c) => c.name.toLowerCase() === cityName.toLowerCase());
-      if (already) {
-        resolved.push(already);
-        continue;
-      }
-      const coords = await geocodeCity(cityName);
-      if (coords) {
-        resolved.push({ id: uid("vi"), name: cityName, lat: coords.lat, lon: coords.lon });
-      } else {
-        failed.push(cityName);
-      }
-      await new Promise((r) => setTimeout(r, 350)); // reste courtois envers le service gratuit
-    }
-    setResolving(false);
-    if (failed.length > 0) {
-      setFailedNames(failed);
-      return; // laisse la personne corriger l'orthographe avant d'enregistrer
-    }
-    const nameChanged = name.trim() && name.trim() !== country.name;
-    let border = country.border;
-    if (!border || border.length === 0 || refreshBorder || nameChanged) {
-      setResolving(true);
-      border = await fetchCountryBorder(name.trim() || country.name);
-      setResolving(false);
-    }
-    onSubmit({ name: name.trim() || country.name, story, cities: resolved, border });
-  };
-
-  return (
-    <Modal onClose={onClose}>
-      <h3 style={styles.modalTitle}>Page pays — {country.name}</h3>
-      <label style={styles.label}>Nom du pays (tel qu'affiché et pour la carte)</label>
-      <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Grèce" />
-      <label style={styles.label}>Histoire / description</label>
-      <textarea style={{ ...styles.input, minHeight: 90, resize: "vertical" }} value={story}
-        onChange={(e) => setStory(e.target.value)} placeholder="Ce que tu veux raconter sur ce pays..." />
-      <label style={styles.label}>Villes visitées (une par ligne, juste le nom)</label>
-      <textarea style={{ ...styles.input, minHeight: 140, resize: "vertical" }}
-        value={citiesText} onChange={(e) => setCitiesText(e.target.value)}
-        placeholder={"Buenos Aires\nSalta\nEl Calafate"} />
-      <p style={{ fontSize: 11, color: "#9AA39C", marginTop: 4 }}>
-        Les coordonnées sont trouvées automatiquement à partir du nom de la ville.
-      </p>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#9AA39C" }}>
-        <input type="checkbox" checked={refreshBorder} onChange={(e) => setRefreshBorder(e.target.checked)} />
-        Recalculer la frontière (utile si elle est incomplète, ex : pays avec plusieurs îles)
-      </label>
-      {failedNames.length > 0 && (
-        <p style={{ fontSize: 12, color: "#E8785A", marginTop: 6 }}>
-          Introuvable : {failedNames.join(", ")}. Vérifie l'orthographe (ajoute le pays si le nom est ambigu, ex : "Salta, Argentine").
-        </p>
-      )}
-      <button style={styles.primaryBtn} disabled={resolving} onClick={handleSubmit}>
-        {resolving ? "Recherche des coordonnées…" : "Enregistrer"}
-      </button>
-    </Modal>
-  );
-}
-
-/* ---------------- STYLES ---------------- */
-const FONT_DISPLAY = "'Anton', sans-serif";
-const FONT_SCRIPT = "'Kaushan Script', cursive";
-const FONT_SIGNATURE = "'Alex Brush', cursive";
-const FONT_BODY = "'Work Sans', sans-serif";
-const FONT_MONO = "'JetBrains Mono', monospace";
-
-const styles = {
-  app: { background: "#0F1211", color: "#F4EFE7", minHeight: "100vh", fontFamily: FONT_BODY },
-
-  hero: { position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  heroPhotoWrap: { position: "absolute", inset: 0, overflow: "hidden" },
-  heroPhoto: { width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(100%) contrast(1.08) brightness(0.72)" },
-  heroOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, #0F1211aa 0%, transparent 30%, transparent 55%, #0F1211ee 100%)" },
-
-  heroNameLayer: {
-    position: "absolute", top: "5%", left: 0, right: 0, zIndex: 2,
-    display: "flex", flexDirection: "column", alignItems: "center", pointerEvents: "none",
-    width: "100%", overflow: "hidden",
-  },
-  heroGiantName: {
-    display: "block", width: "100%", textAlign: "center", whiteSpace: "nowrap",
-    fontFamily: "'Anton', sans-serif", fontWeight: 400, textTransform: "uppercase",
-    fontSize: "22vw", lineHeight: 0.9, letterSpacing: "-0.02em",
-    color: "#D62828",
-    transform: "scaleY(1.15)", transformOrigin: "top",
-    // Zone transparente plus large : VLAD reste plein, le reste devient translucide
-    WebkitMaskImage: "radial-gradient(ellipse 58% 85% at 50% 52%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 45%, #000 82%)",
-    maskImage: "radial-gradient(ellipse 58% 85% at 50% 52%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.3) 45%, #000 82%)",
-    WebkitTextStroke: "1px #D6282866",
-    textShadow: "0 2px 30px #00000040",
-  },
-  heroGiantNameLast: {
-    // Nagrant plus grand, remplit toute la largeur
-    fontSize: "27.5vw",
-    marginTop: "-2vw",
-    WebkitMaskImage: "radial-gradient(ellipse 58% 85% at 50% 45%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 45%, #000 82%)",
-    maskImage: "radial-gradient(ellipse 58% 85% at 50% 45%, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 45%, #000 82%)",
-  },
-
-  heroBottom: {
-    position: "absolute", bottom: "9%", left: 0, right: 0, zIndex: 3,
-    textAlign: "center", padding: "0 20px",
-  },
-  heroInner: { position: "relative", zIndex: 1, textAlign: "center", padding: "0 10px", width: "100%" },
-  heroName: { margin: 0, lineHeight: 0.88, width: "100%" },
-  heroFirst: {
-    display: "block", fontFamily: "'Yellowtail', cursive", fontWeight: 400,
-    fontSize: "clamp(46px, 16vw, 100px)",
-    backgroundImage: "linear-gradient(120deg, #1a1108, #7a5a1f)",
-    WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-    letterSpacing: 0.5,
-  },
-  heroLast: {
-    display: "block", fontFamily: "Arial, sans-serif", fontWeight: 700,
-    fontSize: "clamp(48px, 15vw, 110px)",
-    backgroundImage: "linear-gradient(90deg, #F4B740, #F07B2A)",
-    WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-    letterSpacing: -1, marginTop: -6, width: "100%", textTransform: "uppercase",
-  },
-  heroPhrase: { fontFamily: "'Work Sans', sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: 1, textTransform: "uppercase", color: "#FFFFFFd9", marginTop: 0, marginBottom: 0, maxWidth: 400, marginLeft: "auto", marginRight: "auto" },
-  ctaBtn: {
-    marginTop: 34, background: "none", border: "none", color: "#FFFFFFd9", fontFamily: FONT_DISPLAY,
-    fontSize: 24, letterSpacing: 1, textTransform: "uppercase", cursor: "pointer",
-    borderBottom: "1px solid #FFFFFF66", paddingBottom: 4, animation: "bob 2.4s ease-in-out infinite",
-  },
-
-  indexSection: { padding: "56px 24px 90px", maxWidth: 520, margin: "0 auto" },
-  globeWrap: { display: "flex", justifyContent: "center", marginBottom: 30 },
-  globeSvg: { width: 220, height: 220 },
-  globe3d: { width: "100%", display: "flex", justifyContent: "center", alignItems: "center", cursor: "grab", touchAction: "none", overflow: "hidden" },
-  indexEyebrow: { fontFamily: FONT_MONO, fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#9AA39C", textAlign: "center", margin: "0 0 18px" },
-
-  tileGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-    gap: 10,
-  },
-  tile: { position: "relative", aspectRatio: "3 / 4", borderRadius: 12, overflow: "hidden" },
-  tileBtn: { width: "100%", height: "100%", border: "none", padding: 0, cursor: "pointer", position: "relative", display: "block" },
-  tileImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
-  tileFallback: { width: "100%", height: "100%", background: "linear-gradient(160deg, #16273A, #0F1211)" },
-  tileOverlay: { position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, #0B0D0Cee)" },
-  tileName: {
-    position: "absolute", left: 10, right: 10, bottom: 10, textAlign: "left",
-    fontFamily: FONT_DISPLAY, fontWeight: 400, textTransform: "uppercase",
-    color: "#F4EFE7", fontSize: "clamp(16px, 4.5vw, 20px)", letterSpacing: 0.5, lineHeight: 1.05,
-  },
-  tileCount: {
-    position: "absolute", top: 8, right: 10, fontFamily: FONT_MONO, fontSize: 11,
-    color: "#F4EFE7cc", background: "#0000004d", padding: "2px 6px", borderRadius: 6,
-  },
-  tileAdminBar: { position: "absolute", top: 6, left: 6, display: "flex", gap: 4 },
-  tileIconBtn: { width: 26, height: 26, borderRadius: 7, border: "none", background: "#0F1211cc", color: "#F4EFE7", cursor: "pointer", fontSize: 12 },
-
-  journalOverlay: { position: "fixed", inset: 0, background: "#0F1211", zIndex: 30, display: "flex", flexDirection: "column" },
-  journalTopBar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px" },
-  backBtn: { fontFamily: FONT_MONO, fontSize: 12, background: "none", border: "none", color: "#C9A876", cursor: "pointer", padding: 0 },
-  journalCounter: { fontFamily: FONT_MONO, fontSize: 11, letterSpacing: 1, color: "#9AA39C" },
-
-  journalPage: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" },
-
-  coverWrap: { display: "flex", flexDirection: "column", alignItems: "center", padding: "0 24px", textAlign: "center", maxWidth: 360 },
-  coverTitle: { fontFamily: "'Anton', sans-serif", fontSize: 34, textTransform: "uppercase", color: "#C9A876", margin: "0 0 18px" },
-  coverStory: { fontFamily: "'Kaushan Script', cursive", fontSize: 19, color: "#D9D2C4", lineHeight: 1.5, marginTop: 20 },
-  countryMapWrap: { width: "100%", maxWidth: 300, overflow: "hidden", display: "flex", justifyContent: "center" },
-  countryMapSvg: { width: "100%", maxWidth: 300, height: "auto" },
-  editCoverBtn: {
-    marginTop: 26, background: "none", border: "1px solid #33352f", color: "#9AA39C",
-    borderRadius: 10, padding: "9px 14px", fontSize: 12, cursor: "pointer",
-  },
-
-  singleWrap: { position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" },
-  singleImg: { maxWidth: "94vw", maxHeight: "78vh", objectFit: "contain", borderRadius: 4 },
-  singleCaption: { fontFamily: FONT_SCRIPT, marginTop: 14, color: "#D9D2C4", fontSize: 20, padding: "0 24px", textAlign: "center" },
-  thumbAdminBarStatic: { position: "absolute", top: 10, right: 10, display: "flex", gap: 6 },
-
-  mosaic: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, gridAutoFlow: "dense", width: "100%", height: "100%", padding: "0 10px" },
-  mosaicItem: { position: "relative", borderRadius: 8, overflow: "hidden", minHeight: 140 },
-  mosaicBtn: { width: "100%", height: "100%", display: "block" },
-  mosaicImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
-  mosaicCaption: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "16px 10px 8px", background: "linear-gradient(transparent, #0F1211dd)", fontFamily: FONT_SCRIPT, fontSize: 16, textAlign: "left", color: "#F4EFE7" },
-  thumbAdminBar: { position: "absolute", top: 6, right: 6, display: "flex", gap: 4 },
-  iconBtn: { width: 28, height: 28, borderRadius: 8, border: "none", background: "#0F1211cc", color: "#F4EFE7", cursor: "pointer", fontSize: 13 },
-
-  pageArrow: { position: "absolute", top: "50%", transform: "translateY(-50%)", fontSize: 32, background: "none", border: "none", color: "#F4EFE799", cursor: "pointer", padding: 8, zIndex: 2 },
-  pageDots: { display: "flex", justifyContent: "center", gap: 6, padding: "10px 0 20px" },
-  pageDot: { width: 6, height: 6, borderRadius: "50%", border: "none", padding: 0, cursor: "pointer" },
-
-  addPhotoBtn: { margin: "12px 24px 4px", fontFamily: FONT_BODY, fontSize: 13, color: "#0F1211", background: "#C9A876", border: "none", borderRadius: 10, padding: "10px 16px", cursor: "pointer", fontWeight: 600 },
-  addPhotoFloating: { fontFamily: FONT_BODY, fontSize: 13, color: "#0F1211", background: "#C9A876", border: "none", borderRadius: 10, padding: "9px 14px", cursor: "pointer", fontWeight: 600 },
-  floatingBtnGroup: { position: "absolute", bottom: 60, right: 16, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" },
-  emptyState: { padding: "8px 24px", color: "#9AA39C" },
-
-  zoomOverlay: { position: "fixed", inset: 0, background: "#0B0D0Cf5", zIndex: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" },
-  zoomImg: { maxWidth: "94vw", maxHeight: "82vh", objectFit: "contain", borderRadius: 4 },
-  lightboxCaption: { fontFamily: FONT_SCRIPT, marginTop: 14, color: "#D9D2C4", fontSize: 20, padding: "0 24px", textAlign: "center" },
-
-  adminFab: { position: "fixed", bottom: 18, right: 18, width: 44, height: 44, borderRadius: "50%", background: "#1B1E1C", border: "1px solid #2a2b27", fontSize: 18, cursor: "pointer", zIndex: 40 },
-  adminHomeBar: { position: "fixed", bottom: 18, left: 18, display: "flex", gap: 8, zIndex: 40 },
-  smallGhostBtn: { fontFamily: FONT_BODY, fontSize: 12, background: "#1B1E1C", color: "#F4EFE7", border: "1px solid #2a2b27", borderRadius: 10, padding: "9px 12px", cursor: "pointer" },
-
-  modalOverlay: { position: "fixed", inset: 0, background: "#0B0D0Ccc", zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-  modalCard: { background: "#1B1E1C", width: "100%", maxWidth: 480, borderRadius: "18px 18px 0 0", padding: "22px 20px 28px", border: "1px solid #2a2b27", borderBottom: "none" },
-  modalTitle: { fontFamily: FONT_DISPLAY, fontSize: 20, margin: "0 0 14px" },
-  label: { display: "block", fontFamily: FONT_MONO, fontSize: 11, color: "#9AA39C", margin: "12px 0 6px" },
-  input: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #33352f", background: "#0F1211", color: "#F4EFE7", fontFamily: FONT_BODY, fontSize: 14 },
-  primaryBtn: { width: "100%", marginTop: 18, padding: "12px", borderRadius: 10, border: "none", background: "#C9A876", color: "#0F1211", fontWeight: 600, fontSize: 14, cursor: "pointer" },
-  modalClose: { width: "100%", marginTop: 10, padding: "10px", borderRadius: 10, border: "1px solid #33352f", background: "none", color: "#9AA39C", fontSize: 13, cursor: "pointer" },
-};
